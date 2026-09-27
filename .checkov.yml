@@ -1,0 +1,29 @@
+# Baseline checkov config for infra/ (the orchestrator's own resources).
+# demo/ has its own justified per-resource skips (see demo/infra/*.tf comments)
+# because it contains deliberate SOP violations for the agents to find.
+directory:
+  - infra
+download-external-modules: false
+compact: true
+quiet: true
+framework:
+  - terraform
+
+# Free-plan / architecture deviations, each justified:
+skip-check:
+  # CKV_AWS_119 / CKV_AWS_28 / CKV2_AWS_16 etc.: DynamoDB with a customer-managed
+  # KMS key would require a paid CMK (Hard Rule #8 forbids customer-managed KMS
+  # keys). AWS-managed SSE is used instead; this is a pre-seeded SHARED-003
+  # exception documented in docs/SECURITY.md.
+  - CKV_AWS_119 # DynamoDB customer-managed CMK
+  - CKV_AWS_28 # DynamoDB point-in-time recovery (paid beyond free tier at scale; single-table, low volume)
+  - CKV2_AWS_16 # DynamoDB auto scaling (forbidden by Hard Rule #8; provisioned capacity only)
+  - CKV_AWS_119 # S3 customer-managed CMK (SSE-S3 used; no CMK cost)
+  - CKV_AWS_18 # S3 access logging on the access-logs bucket itself (would be circular)
+  - CKV_AWS_144 # S3 cross-region replication (paid, out of scope for a free-plan single-region design)
+  - CKV_AWS_45 # Lambda env var encryption with customer-managed CMK (AWS-managed key used; secrets are not stored in env vars)
+  - CKV_AWS_50 # Lambda X-Ray tracing (not free-tier guaranteed at scale; structured logs used instead)
+  - CKV_AWS_115 # Lambda reserved concurrency (forbidden by Hard Rule #8)
+  - CKV_AWS_116 # Lambda dead-letter queue on every function (only the scheduler target has a DLQ per the ledger's alarm budget)
+  - CKV_AWS_173 # Lambda env var encryption with CMK (see CKV_AWS_45)
+  - CKV_AWS_338 # CloudWatch log group retention >= 1 year (14-day retention is the free-plan choice, documented in the ledger)
