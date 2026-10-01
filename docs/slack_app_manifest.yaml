@@ -1,0 +1,34 @@
+# Slack app manifest for the CloudOps Agentic Orchestrator's approval bot.
+#
+# Create the app at https://api.slack.com/apps -> "Create New App" ->
+# "From an app manifest", paste this file's contents (Slack's UI validates
+# the manifest live at creation time -- see the README's Deployment section
+# (Step 4) for the full walkthrough).
+#
+# `settings.interactivity.request_url` is a placeholder until the first
+# `deploy.yml` run produces the slack_endpoint Lambda's Function URL --
+# come back and update it in the Slack app's own settings (Interactivity &
+# Shortcuts) once you have that URL; you do not need to recreate the app.
+display_information:
+  name: CloudOps Agentic Orchestrator
+  description: Weekly SOP-grounded CloudOps review with human-approved remediation.
+  background_color: "#1f2430"
+
+features:
+  bot_user:
+    display_name: CloudOps Agentic Orchestrator
+    always_online: false
+
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.public
+
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: "https://REPLACE-AFTER-DEPLOY.lambda-url.ap-south-1.on.aws/slack/interactions"
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
