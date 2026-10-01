@@ -178,3 +178,39 @@ def test_domain_result_round_trip_without_recommendation() -> None:
     assert restored.analyses[0].recommendation is None
     assert restored.analyses[0].carried_over is True
     assert restored.analyses[0].error == "boom"
+
+
+def test_domain_result_round_trips_per_model_usage() -> None:
+    from cloudops_orchestrator.models.report import LLMUsage, ModelUsage
+
+    usage = LLMUsage(
+        per_model={"claude-sonnet-5": ModelUsage(input_tokens=10, output_tokens=5, cost_usd=0.02)},
+        total_cost_usd=0.02,
+    )
+    result = DomainBatchResult(
+        batch_id="cost-0",
+        domain="cost",
+        analyses=[],
+        budget_exhausted=False,
+        cost_usd=0.02,
+        usage=usage,
+    )
+    assert deserialize_domain_result(serialize_domain_result(result)).usage == usage
+
+
+def test_domain_result_without_usage_field_still_loads() -> None:
+    """Results written before usage was serialized must still deserialize."""
+    import json
+
+    legacy = json.dumps(
+        {
+            "batch_id": "b",
+            "domain": "security",
+            "analyses": [],
+            "budget_exhausted": False,
+            "cost_usd": 0.1,
+        }
+    )
+    restored = deserialize_domain_result(legacy)
+    assert restored.usage.total_cost_usd == 0.0
+    assert restored.cost_usd == 0.1

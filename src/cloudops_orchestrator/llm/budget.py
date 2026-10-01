@@ -85,6 +85,29 @@ class BudgetTracker:
             raise BudgetExceeded(self._total_cost_usd, self.max_cost_usd_per_run)
         return cost
 
+    def absorb(self, usage: LLMUsage) -> None:
+        """Fold in usage recorded elsewhere, e.g. by another Lambda's batch.
+
+        Never raises: that spend has already happened. Marks the run as
+        exhausted if the combined total is over ``max_cost_usd_per_run`` or
+        the absorbed usage was itself exhausted.
+        """
+        for model_name, other in usage.per_model.items():
+            existing = self._per_model.get(model_name, ModelUsage())
+            self._per_model[model_name] = existing.model_copy(
+                update={
+                    "input_tokens": existing.input_tokens + other.input_tokens,
+                    "output_tokens": existing.output_tokens + other.output_tokens,
+                    "cache_read_tokens": existing.cache_read_tokens + other.cache_read_tokens,
+                    "cache_creation_tokens": existing.cache_creation_tokens
+                    + other.cache_creation_tokens,
+                    "cost_usd": existing.cost_usd + other.cost_usd,
+                }
+            )
+        self._total_cost_usd += usage.total_cost_usd
+        if usage.budget_exhausted or self._total_cost_usd > self.max_cost_usd_per_run:
+            self.budget_exhausted = True
+
     @property
     def total_cost_usd(self) -> float:
         return self._total_cost_usd

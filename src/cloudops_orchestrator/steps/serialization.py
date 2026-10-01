@@ -13,6 +13,7 @@ from typing import Any
 from cloudops_orchestrator.graph.domain_agent import GroupAnalysis
 from cloudops_orchestrator.models.actions import Recommendation, TriageResult
 from cloudops_orchestrator.models.findings import Finding, FindingGroup
+from cloudops_orchestrator.models.report import LLMUsage
 from cloudops_orchestrator.normalize.masking import Masker
 from cloudops_orchestrator.steps.run_domain_batch import DomainBatchResult
 
@@ -79,6 +80,7 @@ def serialize_domain_result(result: DomainBatchResult) -> str:
             "analyses": [_analysis_to_dict(a) for a in result.analyses],
             "budget_exhausted": result.budget_exhausted,
             "cost_usd": result.cost_usd,
+            "usage": result.usage.model_dump(mode="json"),
         }
     )
 
@@ -91,6 +93,7 @@ def deserialize_domain_result(text: str) -> DomainBatchResult:
         analyses=[_analysis_from_dict(a) for a in data["analyses"]],
         budget_exhausted=data["budget_exhausted"],
         cost_usd=data["cost_usd"],
+        usage=LLMUsage.model_validate(data["usage"]) if "usage" in data else LLMUsage(),
     )
 
 

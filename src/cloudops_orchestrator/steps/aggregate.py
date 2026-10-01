@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from cloudops_orchestrator.llm.budget import BudgetTracker
+from cloudops_orchestrator.llm.budget import BudgetExceeded, BudgetTracker
 from cloudops_orchestrator.llm.rendering import render_prompt
 from cloudops_orchestrator.llm.schemas import ExecutiveSummaryOutput
 from cloudops_orchestrator.llm.structured import call_structured
@@ -103,16 +103,22 @@ def generate_executive_summary(
         f"Total LLM spend this run: ${budget.total_cost_usd:.4f}\n"
         f"budget_exhausted: {budget.budget_exhausted}"
     )
-    result = call_structured(
-        model,
-        schema=ExecutiveSummaryOutput,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        node="report_summary",
-        group_id=f"run-summary-{run_id}",
-        model_name=model_name,
-        budget=budget,
-    )
+    try:
+        result = call_structured(
+            model,
+            schema=ExecutiveSummaryOutput,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            node="report_summary",
+            group_id=f"run-summary-{run_id}",
+            model_name=model_name,
+            budget=budget,
+        )
+    except BudgetExceeded:
+        return (
+            "The executive summary was skipped because this run's LLM budget was exhausted. "
+            "See the itemized findings below, ranked by priority score."
+        )
     return result.executive_summary
 
 
@@ -128,6 +134,12 @@ def aggregate(
     budget: BudgetTracker,
     resolved: list[str] | None = None,
 ) -> RunReport:
+    # Every batch ran in its own Lambda with its own tracker: fold their spend
+    # into this one so the report, the month-to-date total and the LLMCostUSD
+    # metric all reflect the whole run, not just the summary call.
+    for batch_result in domain_results:
+        budget.absorb(batch_result.usage)
+
     findings_by_fingerprint = {f.fingerprint: f for f in findings}
     items = build_report_items(
         domain_results, findings_by_fingerprint=findings_by_fingerprint, now=finished_at

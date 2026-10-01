@@ -3,12 +3,21 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from cloudops_orchestrator.config import load_settings
 from cloudops_orchestrator.graph.domain_agent import GroupAnalysis
+from cloudops_orchestrator.llm.budget import BudgetExceeded, BudgetTracker
 from cloudops_orchestrator.models.actions import TriageResult
 from cloudops_orchestrator.models.enums import Domain, FindingStatus, Severity, TriageVerdict
 from cloudops_orchestrator.models.findings import Finding, FindingGroup
-from cloudops_orchestrator.steps.aggregate import build_report_items, compute_counts
+from cloudops_orchestrator.models.report import LLMUsage, ModelUsage
+from cloudops_orchestrator.steps.aggregate import (
+    aggregate,
+    build_report_items,
+    compute_counts,
+    generate_executive_summary,
+)
 from cloudops_orchestrator.steps.run_domain_batch import DomainBatchResult
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -135,3 +144,62 @@ class TestBuildReportItems:
         )
         assert items[0].group_id == "high"
         assert items[1].group_id == "low"
+
+
+def _batch(batch_id: str, cost: float) -> DomainBatchResult:
+    return DomainBatchResult(
+        batch_id=batch_id,
+        domain="security",
+        analyses=[GroupAnalysis(group=_group(), triage=_triage(), recommendation=None)],
+        budget_exhausted=False,
+        cost_usd=cost,
+        usage=LLMUsage(
+            per_model={"claude-haiku-4-5-20251001": ModelUsage(input_tokens=500, cost_usd=cost)},
+            total_cost_usd=cost,
+        ),
+    )
+
+
+class TestAggregateCost:
+    def test_report_usage_includes_every_batchs_spend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "cloudops_orchestrator.steps.aggregate.generate_executive_summary",
+            lambda **_kwargs: "summary",
+        )
+        budget = BudgetTracker(config=SETTINGS.llm, max_cost_usd_per_run=2.0)
+
+        report = aggregate(
+            run_id="run-1",
+            started_at=datetime(2026, 1, 1, tzinfo=UTC),
+            finished_at=datetime(2026, 1, 1, 1, tzinfo=UTC),
+            domain_results=[_batch("b1", 0.10), _batch("b2", 0.15)],
+            findings=[_finding()],
+            summary_model=None,
+            summary_model_name="claude-sonnet-5",
+            budget=budget,
+        )
+
+        assert report.llm_usage.total_cost_usd == pytest.approx(0.25)
+        assert report.llm_usage.per_model["claude-haiku-4-5-20251001"].input_tokens == 1000
+
+    def test_summary_falls_back_instead_of_failing_when_the_budget_is_exhausted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _raise(*_args: object, **_kwargs: object) -> object:
+            raise BudgetExceeded(2.5, 2.0)
+
+        monkeypatch.setattr("cloudops_orchestrator.steps.aggregate.call_structured", _raise)
+        budget = BudgetTracker(config=SETTINGS.llm, max_cost_usd_per_run=2.0)
+
+        summary = generate_executive_summary(
+            model=None,
+            items=[],
+            counts=compute_counts([]),
+            budget=budget,
+            model_name="claude-sonnet-5",
+            run_id="run-1",
+        )
+
+        assert "budget was exhausted" in summary

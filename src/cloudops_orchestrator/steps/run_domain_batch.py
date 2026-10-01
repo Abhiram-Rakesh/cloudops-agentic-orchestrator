@@ -10,13 +10,14 @@ afterward to flag the batch (and, upstream, the report) as partial.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from cloudops_orchestrator.graph.domain_agent import (
     DomainAgentDeps,
     GroupAnalysis,
     run_domain_graph,
 )
+from cloudops_orchestrator.models.report import LLMUsage
 from cloudops_orchestrator.steps.plan_batches import Batch
 
 
@@ -27,6 +28,9 @@ class DomainBatchResult:
     analyses: list[GroupAnalysis]
     budget_exhausted: bool
     cost_usd: float
+    # Per-model token/cost usage, so Aggregate can add every batch's spend into
+    # the run total (each batch runs in its own Lambda with its own tracker).
+    usage: LLMUsage = field(default_factory=LLMUsage)
 
 
 def run_domain_batch(batch: Batch, *, deps: DomainAgentDeps) -> DomainBatchResult:
@@ -37,6 +41,7 @@ def run_domain_batch(batch: Batch, *, deps: DomainAgentDeps) -> DomainBatchResul
         analyses=analyses,
         budget_exhausted=deps["budget"].budget_exhausted,
         cost_usd=deps["budget"].total_cost_usd,
+        usage=deps["budget"].usage(),
     )
 
 

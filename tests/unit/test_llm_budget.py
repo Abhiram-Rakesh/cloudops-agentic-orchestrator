@@ -6,6 +6,7 @@ import pytest
 
 from cloudops_orchestrator.config import load_settings
 from cloudops_orchestrator.llm.budget import BudgetExceeded, BudgetTracker
+from cloudops_orchestrator.models.report import LLMUsage, ModelUsage
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = load_settings(REPO_ROOT / "config" / "settings.local.yaml", env={})
@@ -120,3 +121,42 @@ class TestBudgetExceeded:
             model_name="claude-haiku-4-5-20251001", input_tokens=100_000, output_tokens=100_000
         )
         assert tracker.budget_exhausted is False
+
+
+class TestAbsorb:
+    def _batch_usage(self, cost: float, *, exhausted: bool = False) -> LLMUsage:
+        return LLMUsage(
+            per_model={
+                "claude-haiku-4-5-20251001": ModelUsage(
+                    input_tokens=1000, output_tokens=200, cost_usd=cost
+                )
+            },
+            total_cost_usd=cost,
+            budget_exhausted=exhausted,
+        )
+
+    def test_adds_other_batches_spend_into_the_total_and_per_model_breakdown(self) -> None:
+        tracker = _tracker(max_cost=2.0)
+        tracker.absorb(self._batch_usage(0.30))
+        tracker.absorb(self._batch_usage(0.45))
+
+        usage = tracker.usage()
+        assert usage.total_cost_usd == pytest.approx(0.75)
+        model = usage.per_model["claude-haiku-4-5-20251001"]
+        assert model.input_tokens == 2000
+        assert model.output_tokens == 400
+        assert model.cost_usd == pytest.approx(0.75)
+        assert usage.budget_exhausted is False
+
+    def test_marks_exhausted_without_raising_when_combined_spend_passes_the_cap(self) -> None:
+        tracker = _tracker(max_cost=1.0)
+        tracker.absorb(self._batch_usage(0.70))
+        tracker.absorb(self._batch_usage(0.70))  # spend already happened: never raises
+
+        assert tracker.total_cost_usd == pytest.approx(1.40)
+        assert tracker.budget_exhausted is True
+
+    def test_exhausted_flag_from_a_batch_is_sticky(self) -> None:
+        tracker = _tracker(max_cost=100.0)
+        tracker.absorb(self._batch_usage(0.01, exhausted=True))
+        assert tracker.budget_exhausted is True
