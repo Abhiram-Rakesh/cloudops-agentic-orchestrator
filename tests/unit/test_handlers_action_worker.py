@@ -10,7 +10,11 @@ from moto import mock_aws
 from cloudops_orchestrator.checkpoint.factory import get_checkpointer
 from cloudops_orchestrator.config import load_settings
 from cloudops_orchestrator.graph.action_graph import ActionGraphDeps, NullRemediator
-from cloudops_orchestrator.handlers.action_worker import resume_action_thread
+from cloudops_orchestrator.handlers.action_worker import (
+    format_outcome,
+    post_outcome,
+    resume_action_thread,
+)
 from cloudops_orchestrator.models.actions import ActionPlan, Approval
 from cloudops_orchestrator.models.enums import ActionType, ApprovalDecision, RiskTier
 from cloudops_orchestrator.policy.config import load_risk_tiers
@@ -148,3 +152,104 @@ class TestResumeActionThread:
         assert found is not None
         _plan_obj, status = found
         assert status == "EXECUTED"
+
+
+class _FakeSlack:
+    def __init__(self) -> None:
+        self.posts: list[dict[str, Any]] = []
+
+    def chat_post_message(self, **kwargs: Any) -> tuple[str, str]:
+        self.posts.append(kwargs)
+        return kwargs["channel"], "9.9"
+
+
+class TestFormatOutcome:
+    def test_dry_run_says_no_changes_were_made_and_includes_the_detail(self) -> None:
+        text = format_outcome(
+            {
+                "decision": "approved",
+                "remediation": {
+                    "success": True,
+                    "dry_run": True,
+                    "detail": "sg-1: DRY RUN, would StartAutomationExecution 'X'",
+                },
+            }
+        )
+        assert text is not None
+        assert "Dry run complete" in text
+        assert "No changes were made" in text
+        assert "sg-1: DRY RUN" in text
+
+    def test_real_execution_includes_the_external_reference(self) -> None:
+        text = format_outcome(
+            {
+                "decision": "approved",
+                "remediation": {
+                    "success": True,
+                    "dry_run": False,
+                    "detail": "PR opened",
+                    "external_ref": "https://github.com/o/r/pull/1",
+                },
+            }
+        )
+        assert text is not None
+        assert "Executed" in text
+        assert "pull/1" in text
+
+    def test_failure_is_reported_as_failed(self) -> None:
+        text = format_outcome(
+            {"decision": "approved", "remediation": {"success": False, "detail": "boom"}}
+        )
+        assert text is not None
+        assert "Remediation failed" in text
+        assert "boom" in text
+
+    @pytest.mark.parametrize(
+        ("decision", "expected"),
+        [
+            ("rejected", "Rejected"),
+            ("snoozed", "Snoozed"),
+            ("queued_outside_window", "change window"),
+            ("refused_kill_switch", "kill switch"),
+        ],
+    )
+    def test_non_execution_outcomes(self, decision: str, expected: str) -> None:
+        text = format_outcome({"decision": decision})
+        assert text is not None
+        assert expected in text
+
+    def test_nothing_to_report_for_a_skipped_or_still_waiting_resume(self) -> None:
+        assert format_outcome(None) is None
+        assert format_outcome({}) is None
+        assert format_outcome({"decision": None, "__interrupt__": [object()]}) is None
+
+    def test_very_long_detail_is_truncated_to_fit_a_slack_section(self) -> None:
+        text = format_outcome(
+            {"decision": "approved", "remediation": {"success": True, "detail": "x" * 10_000}}
+        )
+        assert text is not None
+        assert len(text) < 3000
+
+
+class TestPostOutcome:
+    def test_posts_in_the_digest_thread(self) -> None:
+        slack = _FakeSlack()
+        result = {
+            "decision": "approved",
+            "remediation": {"success": True, "dry_run": True, "detail": "d"},
+        }
+
+        posted = post_outcome(slack, slack={"channel": "C1", "thread_ts": "1.0"}, result=result)
+
+        assert posted is True
+        assert slack.posts[0]["channel"] == "C1"
+        assert slack.posts[0]["thread_ts"] == "1.0"
+        assert "Dry run complete" in slack.posts[0]["text"]
+
+    def test_no_slack_context_or_no_outcome_posts_nothing(self) -> None:
+        slack = _FakeSlack()
+        assert post_outcome(slack, slack=None, result={"decision": "rejected"}) is False
+        assert (
+            post_outcome(slack, slack={"channel": "C1", "thread_ts": "1.0"}, result=None) is False
+        )
+        assert slack.posts == []

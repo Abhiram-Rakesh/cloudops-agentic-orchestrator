@@ -1,6 +1,7 @@
 """``action_worker`` Lambda: resumes the ``action:{action_id}``
 LangGraph thread with a Slack approval decision. Invoked asynchronously by
-``slack_handler`` with ``{"action_id": ..., "approval": {...}}``.
+``slack_handler`` with ``{"action_id": ..., "approval": {...}, "slack": {...}}``;
+afterwards it posts the outcome back to the digest thread.
 
 ``resume_action_thread`` carries all the tested logic (lock acquisition,
 graph resume, lock release) and takes its dependencies by injection, so it
@@ -44,6 +45,57 @@ def resume_action_thread(
         return dict(result)
     finally:
         release_lock(deps["table"], action_id)
+
+
+_MAX_OUTCOME_CHARS = 2800  # Slack section text limit is 3000
+
+
+def format_outcome(result: dict[str, Any] | None) -> str | None:
+    """Slack text describing how a resumed action thread ended, or ``None``
+    when there is nothing to report (a lock-skipped resume, or a first
+    approval of a two-approver action that is still waiting)."""
+    if not result:
+        return None
+    decision = result.get("decision")
+    remediation = result.get("remediation")
+    if decision == "rejected":
+        return ":no_entry_sign: *Rejected.* Recorded; this finding stays a manual ticket."
+    if decision == "snoozed":
+        return ":zzz: *Snoozed.* A time-bound exception was recorded for this finding."
+    if decision == "queued_outside_window":
+        return ":hourglass: *Approved, but not executed:* it is outside the T2 change window."
+    if decision == "refused_kill_switch":
+        return ":octagonal_sign: *Refused:* the kill switch is on. No action was taken."
+    if not remediation:
+        return None
+    detail = str(remediation.get("detail") or "").strip()
+    if len(detail) > _MAX_OUTCOME_CHARS:
+        detail = detail[:_MAX_OUTCOME_CHARS] + "..."
+    if not remediation.get("success", True):
+        return f":x: *Remediation failed.*\n{detail}"
+    if remediation.get("dry_run"):
+        return f":white_check_mark: *Dry run complete.* No changes were made.\n{detail}"
+    external_ref = remediation.get("external_ref")
+    suffix = f"\nReference: `{external_ref}`" if external_ref else ""
+    return f":white_check_mark: *Executed.*\n{detail}{suffix}"
+
+
+def post_outcome(
+    slack_client: Any, *, slack: dict[str, Any] | None, result: dict[str, Any] | None
+) -> bool:
+    """Post the outcome as a reply in the digest thread. ``slack`` is the
+    ``{"channel", "thread_ts"}`` context ``slack_handler`` passed along.
+    Returns whether anything was posted."""
+    text = format_outcome(result)
+    if not slack or text is None:
+        return False
+    slack_client.chat_post_message(
+        channel=slack["channel"],
+        thread_ts=slack.get("thread_ts"),
+        text=text,
+        blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
+    )
+    return True
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -135,7 +187,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         action_id, approval, deps=deps, checkpointer=get_checkpointer(settings)
     )
     flush_tracing()
+    _post_outcome_to_slack(settings, ssm, event.get("slack"), result)
     return {"resumed": result is not None}
 
 
-__all__ = ["lambda_handler", "resume_action_thread"]
+def _post_outcome_to_slack(
+    settings: Any, ssm: Any, slack: dict[str, Any] | None, result: dict[str, Any] | None
+) -> None:
+    """Best effort: a Slack problem must never fail an action that already ran."""
+    from cloudops_orchestrator.integrations.slack_client import WebClientSlackAdapter
+    from cloudops_orchestrator.logging import get_logger
+
+    if not slack or format_outcome(result) is None:
+        return
+    try:
+        bot_token = ssm.get_parameter(
+            Name=f"{settings.storage.parameter_prefix}/slack_bot_token",
+            WithDecryption=True,  # gitleaks:allow
+        )["Parameter"]["Value"]
+        post_outcome(WebClientSlackAdapter(bot_token), slack=slack, result=result)
+    except Exception as exc:
+        get_logger().warning("action_worker.slack_outcome_failed", error=str(exc))
+
+
+__all__ = ["format_outcome", "lambda_handler", "post_outcome", "resume_action_thread"]

@@ -12,6 +12,7 @@ from moto import mock_aws
 
 from cloudops_orchestrator.handlers.slack_handler import (
     Interaction,
+    decided_card_blocks,
     is_authorized,
     is_fresh,
     parse_form_payload,
@@ -60,8 +61,15 @@ class FakeSlackClient:
         self.updates: list[dict[str, Any]] = []
         self.ephemeral: list[dict[str, Any]] = []
 
-    def chat_update(self, *, channel: str, ts: str, text: str) -> None:
-        self.updates.append({"channel": channel, "ts": ts, "text": text})
+    def chat_update(
+        self,
+        *,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.updates.append({"channel": channel, "ts": ts, "text": text, "blocks": blocks})
 
     def post_ephemeral(self, *, channel: str, user: str, text: str) -> None:
         self.ephemeral.append({"channel": channel, "user": user, "text": text})
@@ -287,3 +295,74 @@ class TestProcessInteraction:
         assert result.invoked_worker is True
         assert result.approval is not None
         assert result.approval.decision == ApprovalDecision.SNOOZE
+
+
+CARD_BLOCKS: list[dict[str, Any]] = [
+    {"type": "section", "text": {"type": "mrkdwn", "text": "Revoke world-open SSH"}},
+    {"type": "actions", "elements": [{"type": "button", "action_id": "approve_action"}]},
+]
+
+
+class TestDecidedCard:
+    def test_final_decision_removes_the_buttons_and_adds_a_status_line(self) -> None:
+        blocks = decided_card_blocks(CARD_BLOCKS, "alice chose *approve*.", keep_buttons=False)
+        assert blocks is not None
+        assert [b["type"] for b in blocks] == ["section", "context"]
+        assert blocks[-1]["elements"][0]["text"] == "alice chose *approve*."
+
+    def test_waiting_for_another_approver_keeps_the_buttons(self) -> None:
+        blocks = decided_card_blocks(CARD_BLOCKS, "alice approved (1 of 2).", keep_buttons=True)
+        assert blocks is not None
+        assert [b["type"] for b in blocks] == ["section", "actions", "context"]
+
+    def test_unknown_original_blocks_fall_back_to_a_text_only_update(self) -> None:
+        assert decided_card_blocks([], "x", keep_buttons=False) is None
+
+
+class TestProcessInteractionCard:
+    def test_approval_that_meets_the_threshold_strips_the_buttons(self, table: Any) -> None:
+        put_action_plan(table, _plan(required_approvals=1))
+        slack_client = FakeSlackClient()
+
+        result = process_interaction(
+            _interaction(message_blocks=CARD_BLOCKS),
+            table=table,
+            slack_client=slack_client,
+            now=datetime(2026, 1, 15, tzinfo=UTC),
+        )
+
+        assert result.invoked_worker is True
+        update = slack_client.updates[0]
+        assert "outcome will be posted" in update["text"]
+        assert all(b["type"] != "actions" for b in update["blocks"])
+
+    def test_first_of_two_approvals_keeps_the_buttons_for_the_second_approver(
+        self, table: Any
+    ) -> None:
+        put_action_plan(table, _plan(required_approvals=2))
+        slack_client = FakeSlackClient()
+
+        process_interaction(
+            _interaction(message_blocks=CARD_BLOCKS),
+            table=table,
+            slack_client=slack_client,
+            now=datetime(2026, 1, 15, tzinfo=UTC),
+        )
+
+        update = slack_client.updates[0]
+        assert "1 of 2" in update["text"]
+        assert any(b["type"] == "actions" for b in update["blocks"])
+
+
+class TestParseInteractionThread:
+    def test_reads_thread_ts_and_blocks_from_the_message(self) -> None:
+        payload = {
+            "type": "block_actions",
+            "actions": [{"action_id": "approve_action", "value": "action-1"}],
+            "user": {"id": "U1", "username": "alice"},
+            "channel": {"id": "C1"},
+            "message": {"ts": "2.0", "thread_ts": "1.0", "blocks": CARD_BLOCKS},
+        }
+        interaction = parse_interaction(payload)
+        assert interaction.thread_ts == "1.0"
+        assert interaction.message_blocks == CARD_BLOCKS

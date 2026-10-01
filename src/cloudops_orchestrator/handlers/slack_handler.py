@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from urllib.parse import parse_qs
@@ -80,6 +80,8 @@ class Interaction:
     user_name: str
     channel_id: str
     message_ts: str
+    thread_ts: str | None = None  # the digest's ts when the card is a thread reply
+    message_blocks: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def decision(self) -> ApprovalDecision:
@@ -105,6 +107,8 @@ def parse_interaction(payload: dict[str, Any]) -> Interaction:
         user_name=payload["user"].get("username", payload["user"]["id"]),
         channel_id=payload["channel"]["id"],
         message_ts=payload["message"]["ts"],
+        thread_ts=payload["message"].get("thread_ts"),
+        message_blocks=list(payload["message"].get("blocks") or []),
     )
 
 
@@ -113,8 +117,34 @@ def is_authorized(user_id: str, *, approvers: list[str]) -> bool:
 
 
 class SlackClient(Protocol):
-    def chat_update(self, *, channel: str, ts: str, text: str) -> None: ...
+    def chat_update(
+        self,
+        *,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> None: ...
     def post_ephemeral(self, *, channel: str, user: str, text: str) -> None: ...
+
+
+def _context_block(text: str) -> dict[str, Any]:
+    return {"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}
+
+
+def decided_card_blocks(
+    blocks: list[dict[str, Any]], status_text: str, *, keep_buttons: bool
+) -> list[dict[str, Any]] | None:
+    """The approval card after a click: a status line appended, and the
+    Approve/Reject/Snooze buttons removed once the decision is final.
+
+    ``None`` when the original blocks are unknown, so the caller falls back
+    to a text-only update.
+    """
+    if not blocks:
+        return None
+    kept = [b for b in blocks if keep_buttons or b.get("type") != "actions"]
+    return [*kept, _context_block(status_text)]
 
 
 @dataclass(frozen=True)
@@ -169,14 +199,26 @@ def process_interaction(
         details={"approver": interaction.user_id},
         at=now,
     )
+    approvals_so_far = count_distinct_approvals(get_approvals(table, plan.action_id))
+    should_invoke = (
+        decision != ApprovalDecision.APPROVE or approvals_so_far >= plan.required_approvals
+    )
+    if should_invoke:
+        status_text = f"{interaction.user_name} chose *{decision.value}*."
+        if decision == ApprovalDecision.APPROVE:
+            status_text += " The outcome will be posted in this thread."
+    else:
+        status_text = (
+            f"{interaction.user_name} approved ({approvals_so_far} of "
+            f"{plan.required_approvals}); waiting for another approver."
+        )
     slack_client.chat_update(
         channel=interaction.channel_id,
         ts=interaction.message_ts,
-        text=f"{interaction.user_name} chose *{decision.value}*.",
-    )
-
-    should_invoke = decision != ApprovalDecision.APPROVE or (
-        count_distinct_approvals(get_approvals(table, plan.action_id)) >= plan.required_approvals
+        text=status_text,
+        blocks=decided_card_blocks(
+            interaction.message_blocks, status_text, keep_buttons=not should_invoke
+        ),
     )
     reason = "threshold reached" if should_invoke else "awaiting more approvals"
     return ProcessResult(invoked_worker=should_invoke, reason=reason, approval=approval)
@@ -228,6 +270,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     {
                         "action_id": result.approval.action_id,
                         "approval": result.approval.model_dump(mode="json"),
+                        # where action_worker posts the outcome
+                        "slack": {
+                            "channel": interaction.channel_id,
+                            "thread_ts": interaction.thread_ts or interaction.message_ts,
+                        },
                     }
                 ),
             )
@@ -280,6 +327,7 @@ __all__ = [
     "Interaction",
     "ProcessResult",
     "SlackClient",
+    "decided_card_blocks",
     "is_authorized",
     "is_fresh",
     "lambda_handler",

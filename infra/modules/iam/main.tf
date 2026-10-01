@@ -335,7 +335,7 @@ data "aws_iam_policy_document" "action_worker" {
     actions = ["ssm:GetParameter"]
     resources = [
       for arn in var.secret_parameter_arns :
-      arn if endswith(arn, "/github_token") || endswith(arn, "/anthropic_api_key") || endswith(arn, "/langsmith_api_key")
+      arn if endswith(arn, "/github_token") || endswith(arn, "/anthropic_api_key") || endswith(arn, "/langsmith_api_key") || endswith(arn, "/slack_bot_token")
     ]
   }
   statement {

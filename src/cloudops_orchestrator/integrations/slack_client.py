@@ -22,7 +22,14 @@ class SlackClient(Protocol):
         """Returns ``(channel, ts)`` of the posted message."""
         ...
 
-    def chat_update(self, *, channel: str, ts: str, text: str) -> None: ...
+    def chat_update(
+        self,
+        *,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> None: ...
 
     def post_ephemeral(self, *, channel: str, user: str, text: str) -> None: ...
 
@@ -47,8 +54,18 @@ class WebClientSlackAdapter:
         response = self._client.chat_postMessage(**kwargs)
         return str(response["channel"]), str(response["ts"])
 
-    def chat_update(self, *, channel: str, ts: str, text: str) -> None:
-        self._client.chat_update(channel=channel, ts=ts, text=text)
+    def chat_update(
+        self,
+        *,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> None:
+        kwargs: dict[str, Any] = {"channel": channel, "ts": ts, "text": text}
+        if blocks is not None:
+            kwargs["blocks"] = blocks
+        self._client.chat_update(**kwargs)
 
     def post_ephemeral(self, *, channel: str, user: str, text: str) -> None:
         self._client.chat_postEphemeral(channel=channel, user=user, text=text)
