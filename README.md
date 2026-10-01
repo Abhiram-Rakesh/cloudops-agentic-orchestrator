@@ -47,39 +47,51 @@ How to read it:
 
 ## Screenshots
 
-Screenshots will be added after the next end-to-end run of the deployment steps below.
+All taken from a real deployment against the demo stack. The GuardDuty entries ("Potential Kubernetes cluster compromise" and similar) are seeded sample findings.
 
-<!--
-Screenshots to add (save in screenshots/):
 ### Weekly digest in Slack
 
 ![Slack weekly digest](screenshots/slack-weekly-digest.png)
 
-### Approval thread: Approve / Reject / Snooze
+The weekly review posted to `#cloudops`: counts per domain, the top findings ranked by priority, and a threaded approval card for each action that can be automated.
+
+### Approval card
 
 ![Slack approval thread](screenshots/slack-approval-thread.png)
 
-### Action outcome after approval (dry-run SSM Automation dispatch)
+One action awaiting a decision: its risk tier, the targets, the SOP clause it cites verbatim, the plan hash the approval is bound to, and the Approve / Reject / Snooze buttons.
+
+### Outcome after approval
 
 ![Slack action outcome](screenshots/slack-action-outcome.png)
 
-### Step Functions execution (all states succeeded)
+After an approval the buttons are cleared and the result is posted in the thread. These are dry-run SSM Automation actions, so each reply lists what *would* have run per target; nothing in AWS was changed.
+
+### Step Functions execution
 
 ![Step Functions execution graph](screenshots/stepfunctions-execution-graph.png)
 
-### HTML report: executive summary and prioritised findings
+A succeeded weekly run: `InitRun`, the optional Prowler/drift refresh wait, `Collect`, the `DomainBatches` map and `Aggregate`. The failure-notifier path was not taken.
+
+### HTML report
 
 ![HTML report](screenshots/html-report.png)
 
-### LangSmith trace of one domain batch (the graph fans out per finding group, each triaged by Claude Haiku 4.5; prompts and responses are hidden by `langsmith.anonymize`)
+The report written to S3 and linked from the digest: an executive summary and the findings ranked by priority score, each with its verdict, proposed action and cited SOP clause.
+
+### LangSmith trace
 
 ![LangSmith trace](screenshots/langsmith-trace.png)
 
-### `cloudops doctor` against the deployed account
+One domain-agent run: the graph fans out per finding group, and each group is triaged by Claude Haiku 4.5. Prompts and responses are hidden by `langsmith.anonymize`, so only the structure, latency and token counts show.
+
+### `cloudops doctor`
 
 ![cloudops doctor](screenshots/doctor-output.png)
 
--->
+Read-only health checks against the deployed account, all passing. Account identifiers are redacted.
+
+> The digest and report screenshots were captured on a run made before the LLM cost accounting was fixed, so their cost lines understate that run's real cost (about $3.36). See [AWS cost estimate](#aws-cost-estimate).
 
 ---
 
