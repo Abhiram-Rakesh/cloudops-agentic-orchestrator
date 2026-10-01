@@ -4,8 +4,6 @@ A multi-agent CloudOps system on AWS. **Security**, **Cost** and **Drift** agent
 
 The LLM never holds write credentials. It produces a structured `Recommendation`; a deterministic policy engine decides, in code, whether and how anything can run.
 
-> **Status:** deployed on AWS and verified end to end: a real weekly review across all three domains, the Slack approval flow through to an SSM Automation dry-run dispatch, Terraform PR drafting, drift detection against the demo stack, and LangSmith tracing.
-
 ---
 
 ## Contents
@@ -90,8 +88,6 @@ One domain-agent run: the graph fans out per finding group, and each group is tr
 ![cloudops doctor](screenshots/doctor-output.png)
 
 Read-only health checks against the deployed account, all passing. Account identifiers are redacted.
-
-> The digest and report screenshots were captured on a run made before the LLM cost accounting was fixed, so their cost lines understate that run's real cost (about $3.36). See [AWS cost estimate](#aws-cost-estimate).
 
 ---
 
