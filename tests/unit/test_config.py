@@ -24,7 +24,7 @@ def test_load_dev_settings_interpolates_env() -> None:
         "SLACK_CHANNEL_ID": "C1234567890",
         "APPROVER_SLACK_ID": "U1234567890",
         "GH_OWNER": "octocat",
-        "REPO_NAME": "cloudops-agentic-orchestrator-lite",
+        "REPO_NAME": "cloudops-agentic-orchestrator",
     }
     settings = load_settings(REPO_ROOT / "config" / "settings.dev.yaml", env=env)
     assert settings.aws.accounts[0].id == "222222222222"

@@ -288,8 +288,8 @@ Do these in order; later steps depend on earlier outputs. Each step ends with **
 ### Step 1: Clone and install
 
 ```bash
-git clone https://github.com/<your-user>/cloudops-agentic-orchestrator-lite.git
-cd cloudops-agentic-orchestrator-lite
+git clone https://github.com/<your-user>/cloudops-agentic-orchestrator.git
+cd cloudops-agentic-orchestrator
 uv sync --frozen --all-extras
 uv run cloudops version
 make lint typecheck test
@@ -309,9 +309,9 @@ terraform init
 terraform apply \
   -var="account_id=$(aws sts get-caller-identity --query Account --output text)" \
   -var="github_owner=$(gh api user -q .login)" \
-  -var="github_repo=cloudops-agentic-orchestrator-lite" \
+  -var="github_repo=cloudops-agentic-orchestrator" \
   -var="github_owner_id=$(gh api user -q .id)" \
-  -var="github_repo_id=$(gh api repos/$(gh api user -q .login)/cloudops-agentic-orchestrator-lite -q .id)"
+  -var="github_repo_id=$(gh api repos/$(gh api user -q .login)/cloudops-agentic-orchestrator -q .id)"
 cd ../..
 ```
 
@@ -389,7 +389,7 @@ The agent's reach is limited in code, independent of the token's scope: `remedia
 
 **Expected outcome**
 
-You hold a token beginning `github_pat_`. `gh api -H "Authorization: Bearer <token>" repos/<you>/cloudops-agentic-orchestrator-lite -q .full_name` (optional check) prints the repo name.
+You hold a token beginning `github_pat_`. `gh api -H "Authorization: Bearer <token>" repos/<you>/cloudops-agentic-orchestrator -q .full_name` (optional check) prints the repo name.
 
 ### Step 6: Deploy the orchestrator
 
@@ -472,7 +472,7 @@ Both runs finish ✓ (Prowler runs the FSBP and CIS 3.0 checks with OCSF output)
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export ARTIFACT_BUCKET=$(terraform -chdir=infra/envs/dev output -raw artifacts_bucket_name)
 export SLACK_CHANNEL_ID=<channel id> APPROVER_SLACK_ID=<your member id>
-export GH_OWNER=<your github user> REPO_NAME=cloudops-agentic-orchestrator-lite
+export GH_OWNER=<your github user> REPO_NAME=cloudops-agentic-orchestrator
 
 uv run cloudops doctor --config config/settings.dev.yaml
 ```

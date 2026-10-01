@@ -74,7 +74,7 @@ approvals:
 github:
   auth_mode: pat
   owner: local
-  repo: cloudops-agentic-orchestrator-lite
+  repo: cloudops-agentic-orchestrator
 report:
   presign_days: 7
   timezone: Asia/Kolkata

@@ -3,7 +3,7 @@
 alert_email = "you@example.com"
 
 github_owner = "your-github-username"
-repo_name    = "cloudops-agentic-orchestrator-lite"
+repo_name    = "cloudops-agentic-orchestrator"
 
 slack_channel_id = "C0000000000"
 
