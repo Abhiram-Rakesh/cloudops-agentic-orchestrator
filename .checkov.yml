@@ -1,0 +1,62 @@
+# Baseline checkov config for infra/ (the orchestrator's own resources).
+# demo/ has its own justified per-resource skips (see demo/infra/*.tf comments)
+# because it contains deliberate SOP violations for the agents to find.
+directory:
+  - infra
+download-external-modules: false
+compact: true
+quiet: true
+framework:
+  - terraform
+
+# Architecture deviations, each justified:
+skip-check:
+  # CKV_AWS_119 / CKV_AWS_28 / CKV2_AWS_16 etc.: DynamoDB with a customer-managed
+  # KMS key would add a paid CMK this design does not use. AWS-managed SSE is
+  # used instead; this is a pre-seeded SHARED-003
+  # exception documented in README.md (Security).
+  # The permissions boundary (modules/iam, data.aws_iam_policy_document.boundary)
+  # is deliberately allow-all-with-a-deny-list: a boundary with no Allow grants
+  # nothing (the effective permission is the intersection with each role's own
+  # policy), which broke every Lambda role on first deploy. The explicit Deny
+  # statements (IAM writes, Organizations, etc.) are the actual guardrails.
+  - CKV_AWS_1 # boundary baseline Allow "*:*" (see above)
+  - CKV_AWS_49 # boundary baseline Allow "*" action (see above)
+  - CKV_AWS_107 # credentials-exposure check trips on the baseline Allow (see above)
+  - CKV2_AWS_40 # full-IAM-privileges check trips on the baseline Allow (see above)
+  - CKV_AWS_119 # DynamoDB customer-managed CMK
+  - CKV_AWS_28 # DynamoDB point-in-time recovery (extra cost; single-table, low volume)
+  - CKV2_AWS_16 # DynamoDB auto scaling (provisioned capacity only, by design)
+  - CKV_AWS_119 # S3 customer-managed CMK (SSE-S3 used; no CMK cost)
+  - CKV_AWS_18 # S3 access logging on the access-logs bucket itself (would be circular)
+  - CKV_AWS_144 # S3 cross-region replication (paid, out of scope for a single-region design)
+  - CKV_AWS_45 # Lambda env var encryption with customer-managed CMK (AWS-managed key used; secrets are not stored in env vars)
+  - CKV_AWS_50 # Lambda X-Ray tracing (structured logs used instead)
+  - CKV_AWS_115 # Lambda reserved concurrency (not used; MaxConcurrency is capped in the state machine)
+  - CKV_AWS_116 # Lambda dead-letter queue on every function (only the scheduler target has a DLQ, which the DLQ-depth alarm watches)
+  - CKV_AWS_173 # Lambda env var encryption with CMK (see CKV_AWS_45)
+  - CKV_AWS_338 # CloudWatch log group retention >= 1 year (14-day retention is a deliberate cost choice)
+  - CKV_AWS_356 # IAM policy uses "*" as a resource: only for AWS APIs with no resource-level ARN support (Cost Explorer, Compute Optimizer, CloudTrail LookupEvents, Access Analyzer List|Get, EC2/S3 Describe*) — every mutating action is scoped to a real ARN (see infra/modules/iam/main.tf)
+  - CKV_AWS_145 # S3 bucket encrypted with KMS: SSE-S3 (AES256) is used instead — no customer-managed CMK, same reasoning as CKV_AWS_119
+  - CKV_AWS_21 # S3 bucket versioning: deliberately off — these are append-mostly evidence/report buckets with their own lifecycle expiry, not a source of truth needing version history
+  - CKV2_AWS_62 # S3 event notifications: no event-driven processing off bucket events in this architecture; would be an unused paid-adjacent feature
+  - CKV_AWS_337 # SSM SecureString parameters use the AWS-managed default key (alias/aws/ssm), not a customer-managed CMK
+  - CKV2_AWS_34 # SSM parameter encryption: kill_switch/demo_state/trial_start_date are deliberately plain String operational flags, not secrets — the 5 real secrets are SecureString (see CKV_AWS_337)
+  - CKV_AWS_158 # CloudWatch Log Group KMS encryption: AWS-managed encryption is used — no customer-managed CMK
+  - CKV_AWS_272 # Lambda code-signing: adds a Signer/signing-profile paid-adjacent workflow out of scope for this system; source_code_hash already detects tampering between deploys
+  - CKV_AWS_117 # Lambda inside a VPC: the orchestrator deliberately has no VPC (and therefore no NAT Gateway, which a VPC'd Lambda would need for internet egress to Anthropic/Slack/GitHub) — every Lambda here runs outside a VPC by design
+  - CKV_AWS_285 # Step Functions execution history logging: logging_configuration is set, deliberately at level ERROR (not ALL) — ALL-level logging of every state transition would multiply CloudWatch Logs ingestion volume for no operational benefit at this scale
+  - CKV_AWS_284 # Step Functions X-Ray tracing: same reasoning as CKV_AWS_50's Lambda X-Ray skip — structured logs are used instead
+  - CKV_AWS_297 # EventBridge Scheduler CMK: AWS-managed encryption is used — no customer-managed CMK
+  - CKV_AWS_258 # Lambda Function URL AuthType NONE: required — Slack cannot sign AWS SigV4 requests, so slack_handler verifies Slack's own HMAC signature in code instead (handlers/slack_handler.py's verify_signature/is_fresh)
+  - CKV_AWS_301 # Lambda publicly accessible via its Function URL: same reasoning as CKV_AWS_258 — this is the one Lambda in the system that must accept unauthenticated (at the AWS layer) requests from Slack
+  - CKV2_AWS_48 # AWS Config recording all possible resources: deliberately narrow (all_supported=false) — Config has no free trial and bills per recorded configuration item, so only the resource types the SOPs actually cover are recorded
+  - CKV2_AWS_45 # AWS Config recorder "all supported resources": same reasoning as CKV2_AWS_48
+  - CKV2_AWS_3 # GuardDuty enabled org-wide: this is a single-account design with no AWS Organizations usage (the permissions boundary denies organizations:* entirely) — org-wide GuardDuty doesn't apply
+  - CKV_AWS_35 # CloudTrail KMS CMK encryption: AWS-managed SSE-S3 on the destination bucket is used instead — no customer-managed CMK
+  - CKV_AWS_252 # CloudTrail SNS topic: out of scope ("first trail free; S3 storage only") — the collectors/cloudtrail.py collector reads via cloudtrail:LookupEvents on the weekly schedule, not real-time notifications
+  - CKV2_AWS_10 # CloudTrail CloudWatch Logs integration: not used — collectors/cloudtrail.py reads via cloudtrail:LookupEvents directly, so a parallel CloudWatch Logs delivery would be an unused ingestion cost
+  - CKV_AWS_108 # gha-deploy's IAM policy (infra/bootstrap/main.tf): a Terraform CI deploy role is inherently broad across the services it provisions — mitigated by process (OIDC trust scoped to ref:refs/heads/main, PR review required to merge to main, deploy.yml gated to the repo owner), not by ARN-scoping every action, which isn't practical for a role whose entire job is creating those resources
+  - CKV_AWS_109 # gha-deploy permissions-management-without-constraints: see CKV_AWS_108 — IAM role/policy management itself IS ARN-scoped to ${name_prefix}-*; the flagged actions are the other services' management-plane calls (ssm:PutParameter, etc.)
+  - CKV_AWS_110 # gha-deploy privilege escalation: see CKV_AWS_108
+  - CKV_AWS_111 # gha-deploy write access without constraints: see CKV_AWS_108

@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+
+alert_email = "you@example.com"
+
+github_owner = "your-github-username"
+repo_name    = "cloudops-agentic-orchestrator-lite"
+
+slack_channel_id = "C0000000000"
+
+# T2 actions require two DISTINCT approvers — add a second Slack user ID or
+# T2 automations will stay pending forever.
+approver_slack_ids = ["U0000000001"]
+
+trial_start_date = "2026-01-01"
+
+enable_security_hub     = true
+enable_guardduty        = true
+enable_config           = true
+enable_runbook_executor = false
