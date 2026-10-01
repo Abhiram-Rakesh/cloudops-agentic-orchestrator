@@ -71,7 +71,7 @@ Screenshots to add (save in screenshots/):
 
 ![HTML report](screenshots/html-report.png)
 
-### LangSmith trace of one domain batch
+### LangSmith trace of one domain batch (the graph fans out per finding group, each triaged by Claude Haiku 4.5; prompts and responses are hidden by `langsmith.anonymize`)
 
 ![LangSmith trace](screenshots/langsmith-trace.png)
 
@@ -148,7 +148,7 @@ sequenceDiagram
     SlackH->>Worker: async invoke {action_id, approval}
     Worker->>Worker: resume LangGraph thread at its interrupt()
     Worker->>Worker: threshold met? execute (ssm_automation /<br/>terraform_pr / terraform_revert_dispatch)
-    Worker->>Slack: chat.update with the outcome
+    Worker->>Slack: post the outcome in the digest thread
 ```
 
 ### From a raw finding to an approved action
@@ -547,7 +547,7 @@ In an approval thread, click **Approve**.
 
 **Expected outcome**
 
-Slack returns 200 within three seconds, `action_worker` resumes the thread, and the message updates in place with the outcome. With the shipped default (`remediation.runbook_executor: {enabled: true, dry_run: true}`) an `ssm_automation` action reports a **dry-run** dispatch per target and makes no real `StartAutomationExecution` call. A `terraform_pr` action opens a **draft PR** on a `cloudops/<intent>/<short_fingerprint>` branch. A click from a Slack user not in `approvals.approvers` gets an ephemeral "not authorized" reply, and the attempt is audited.
+Slack returns 200 within three seconds and the card updates in place: the Approve / Reject / Snooze buttons disappear and a status line appears ("<you> chose approve. The outcome will be posted in this thread."). A first approval on a two-approver (T2) action instead keeps the buttons and says "approved (1 of 2)". `action_worker` then resumes the thread and **posts the outcome as a reply in the digest thread**. With the shipped default (`remediation.runbook_executor: {enabled: true, dry_run: true}`) an `ssm_automation` action produces a reply that starts "Dry run complete. No changes were made." followed by one "would StartAutomationExecution ..." line per target, and makes no real `StartAutomationExecution` call. A `terraform_pr` action opens a **draft PR** on a `cloudops/<intent>/<short_fingerprint>` branch. A click from a Slack user not in `approvals.approvers` gets an ephemeral "not authorized" reply, and the attempt is audited.
 
 ---
 
@@ -592,8 +592,8 @@ Settings live in `config/settings.dev.yaml` (deployed) and `config/settings.loca
 | ------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------ |
 | `llm.triage_model`                          | `claude-haiku-4-5-20251001`     | Triage model                                                             |
 | `llm.reasoning_model`                       | `claude-sonnet-5`               | Recommendation and executive-summary model                               |
-| `llm.max_cost_usd_per_run`                  | `2.0`                           | Hard per-run cap; remaining groups degrade to `NEEDS_HUMAN`              |
-| `llm.max_cost_usd_per_month`                | `15.0`                          | Checked in `InitRun` before collecting                                   |
+| `llm.max_cost_usd_per_run`                  | `2.0`                           | Per-run limit. Each batch checks its own spend against it (remaining groups degrade to `NEEDS_HUMAN`); `Aggregate` adds all batches together, flags the report if the total passes it, and the `llm-cost-usd` alarm fires |
+| `llm.max_cost_usd_per_month`                | `15.0`                          | Checked in `InitRun` before collecting, against the month-to-date total (the sum of every run's full cost) |
 | `llm.max_concurrency`                       | `3`                             | Concurrent LLM calls inside a batch                                      |
 | `llm.masking`                               | `true`                          | Tokenise identifiers before prompts                                      |
 | `orchestration.max_groups_per_batch`        | `12`                            | Finding groups per `DomainBatch` Lambda                                  |
@@ -655,7 +655,7 @@ These are estimates from approximate `ap-south-1` list prices, not measurements.
 
 | Line item                         | Estimate                       | Notes                                                                                       |
 | --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| Anthropic API                     | ~$0.3-2 per run, ~$2-9/month at ~4 runs | Haiku 4.5 triage, Sonnet 5 reasoning. Hard caps: `$2`/run and `$15`/month, enforced in-process by `llm/budget.py`. A run degrades to a partial report rather than overspend. |
+| Anthropic API                     | ~$0.3-2 per run, ~$2-9/month at ~4 runs | Haiku 4.5 triage, Sonnet 5 reasoning. Caps in `llm/budget.py`: `$2`/run (each batch tracks its own spend; `Aggregate` sums them, flags the report and the `LLMCostUSD` alarm fires if the total passes it) and `$15`/month (checked before each run starts, against the month-to-date total). |
 | Bedrock Titan embeddings          | Cents                          | Only when `knowledge_base/**` changes (`kb-sync.yml`) and for each retrieval query.         |
 | DynamoDB (provisioned)            | ~$10-12/month, the largest fixed AWS line | 17 RCU and 17 WCU provisioned across both tables (8/8 + a 3/3 index, and 6/6 for checkpoints), billed hourly whether or not they are used. |
 | Lambda, Step Functions, EventBridge, SNS, SSM, CloudWatch Logs | Pennies at a weekly cadence | ~15-35 state transitions per run; eight functions, no VPC, no NAT.        |
@@ -679,7 +679,7 @@ The things that can surprise you:
 - **One monthly AWS Budget** (`cloudops-lite-monthly`, default **$25**, gross before credits). It alerts by email at 50%, 80% and 100% of actual spend, plus when the *forecast* passes 100%. The limit is the steady-state estimate (~$13-17) plus headroom for a few days of the demo stack. At that size the 50% alert fires most months, which is intended: the forecast alert is the early warning for a demo stack or trial service left running. Change it with the `monthly_budget_usd` Terraform variable.
 - **A Cost Anomaly Detection daily email** for any anomaly with an absolute impact of $3 or more (about six times the daily baseline), so a real spike is flagged without noise.
 
-AWS Budgets only covers AWS charges. **Anthropic spend is billed by Anthropic**, so it is not in this budget. The in-app caps (`$2` per run, `$15` per month, enforced in `llm/budget.py`) cover it, and they are the tighter, faster control: they stop overspend mid-run, whereas AWS Budgets evaluates with up to a 24-hour delay. The `llm-cost-usd` CloudWatch alarm fires if a run's recorded LLM cost ever exceeds the `$2` per-run cap.
+AWS Budgets only covers AWS charges. **Anthropic spend is billed by Anthropic**, so it is not in this budget. The in-app limits (`$2` per run, `$15` per month, in `llm/budget.py`) cover it. The monthly one is checked before each run starts, so it reacts faster than AWS Budgets, which evaluates with up to a 24-hour delay. The per-run limit is tracked per batch and summed by `Aggregate`, so a run can finish slightly over it: the report is then flagged, the executive summary is skipped, and the `llm-cost-usd` CloudWatch alarm fires.
 
 ---
 
