@@ -481,24 +481,26 @@ uv run cloudops doctor --config config/settings.dev.yaml
 
 **Expected outcome**
 
-One line per check, formatted `STATUS name: detail`:
+One line per check, formatted `STATUS name: detail`. A healthy deployment looks like this (identifiers shown as placeholders):
 
 ```
 OK    sts_identity: Account <id>, ARN <arn>
 OK    dynamodb_tables: 2 table(s) PROVISIONED, read=17 write=17
 OK    ssm_parameters: All 5 parameter(s) set
-OK    titan_access: amazon.titan-embed-text-v2:0 is listed (...)
-OK    security_trial: ... GuardDuty: enabled; Config: enabled. Trial day N, M day(s) until the 30-day trial window ends.
+OK    titan_access: amazon.titan-embed-text-v2:0 is listed (does not confirm this account's Model Access is enabled for it)
+OK    security_trial: Security Hub: enabled; GuardDuty: enabled; Config: enabled. Trial day N, M day(s) until the 30-day trial window ends.
 OK    cost_explorer: 1 anomaly monitor(s) found
 OK    kb_index: kb_version=<git sha>
-OK    prowler/latest/findings.json: s3://<bucket>/... is 0 day(s) old
-WARN  drift/latest/orders-demo/plan.json: ... not found    # expected until the demo stack is up (Step 11)
+OK    prowler/latest/findings.json: s3://<bucket>/prowler/latest/findings.json is 0 day(s) old
+OK    drift/latest/orders-demo/plan.json: s3://<bucket>/drift/latest/orders-demo/plan.json is 0 day(s) old
 OK    langsmith_key: Set
 OK    state_machine_schedule: Schedule state=ENABLED
 OK    budgets: 1 budget(s) found
-OK    slack_auth: Authenticated as <bot user>
 OK    github_token: Can read <owner>/<repo>
+OK    slack_auth: Authenticated as <bot user>
 ```
+
+The two artifact lines show `WARN ... not found` until the scanners have run (Step 9) and, for drift, until the demo stack is up (Step 11).
 
 Every check should be `OK` or an expected `WARN`. `ssm_parameters` showing `Still CHANGE_ME` means Step 7 skipped a value. The command exits non-zero only on a `FAIL`.
 
@@ -541,9 +543,10 @@ aws stepfunctions describe-execution --execution-arn <executionArn from the outp
 **Expected outcome**
 
 - `start-execution` returns an `executionArn` and `startDate`.
-- The execution moves through `InitRun` > (`WaitRefresh` / `CheckRefresh`, with `refresh: true`) > `Collect` > `DomainBatches` (one Map iteration per batch of up to 12 finding groups) > `Aggregate` > `RunSucceeded`. `Collect` is the longest state on an account with hundreds of findings (several minutes). Total runtime is tens of minutes in that case.
+- The execution moves through `InitRun` > (`WaitRefresh` / `CheckRefresh`, with `refresh: true`) > `Collect` > `DomainBatches` (one Map iteration per batch of up to 12 finding groups, two running at a time) > `Aggregate` > `RunSucceeded`. On an account with about 300 finding groups, `Collect` takes 1-2 minutes, `DomainBatches` about 8 minutes (27 batches) and `Aggregate` about 25 seconds, so a run takes **about 10 minutes**. With `refresh: true` add the Prowler scan, about 9 minutes more.
 - `describe-execution` ends at `"SUCCEEDED"`.
-- In the Slack channel you get the **weekly digest** (executive summary, counts per domain and status, prioritised items) and **one threaded approval message per automatable action**. The HTML and JSON report are in `s3://<bucket>/reports/<run_id>.{html,json}` with a presigned link in the digest.
+- In the Slack channel you get the **weekly digest** (counts per domain and status, the top findings by priority, and the run's LLM cost) and **one threaded approval message per automatable action**. The full report, including the executive summary, is in `s3://<bucket>/reports/<run_id>.{html,json}`, linked from the digest.
+- A run costs roughly $0.01 per finding group in Anthropic charges (about $3.40 for 300 groups). See [AWS cost estimate](#aws-cost-estimate).
 - If the monthly LLM cap is already spent, the state machine ends in `BudgetExceeded` (a clean `Succeed`) instead of overspending.
 
 ### Step 13: Approve an action
@@ -663,7 +666,7 @@ These are estimates from approximate `ap-south-1` list prices, not measurements.
 
 | Line item                         | Estimate                       | Notes                                                                                       |
 | --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| Anthropic API                     | ~$0.3-2 per run, ~$2-9/month at ~4 runs | Haiku 4.5 triage, Sonnet 5 reasoning. Caps in `llm/budget.py`: `$2`/run (each batch tracks its own spend; `Aggregate` sums them, flags the report and the `LLMCostUSD` alarm fires if the total passes it) and `$15`/month (checked before each run starts, against the month-to-date total). |
+| Anthropic API                     | ~$0.011 per finding group: ~$3.40 per run on the ~300-group demo account (about $14/month weekly); ~$0.35-0.65 per run with 30-60 groups | Haiku 4.5 triage, Sonnet 5 reasoning. Caps in `llm/budget.py`: `$2`/run (each batch tracks its own spend; `Aggregate` sums them, flags the report and the `LLMCostUSD` alarm fires if the total passes it) and `$15`/month (checked before each run starts, against the month-to-date total). |
 | Bedrock Titan embeddings          | Cents                          | Only when `knowledge_base/**` changes (`kb-sync.yml`) and for each retrieval query.         |
 | DynamoDB (provisioned)            | ~$10-12/month, the largest fixed AWS line | 17 RCU and 17 WCU provisioned across both tables (8/8 + a 3/3 index, and 6/6 for checkpoints), billed hourly whether or not they are used. |
 | Lambda, Step Functions, EventBridge, SNS, SSM, CloudWatch Logs | Pennies at a weekly cadence | ~15-35 state transitions per run; eight functions, no VPC, no NAT.        |
@@ -672,7 +675,7 @@ These are estimates from approximate `ap-south-1` list prices, not measurements.
 | Security trial (~30 days)         | ~$1-3 extra                    | AWS Config bills per configuration item from day one (daily recording, narrow resource types). Security Hub and GuardDuty are free during their trial windows and **bill afterwards**. |
 | Demo stack (while up)             | ~$0.5/day, ~$15/month if left up | Two small EC2 instances, ~31 GB of volumes and an unassociated Elastic IP, only while `make demo-up` is active. Tear it down with `make demo-down`. |
 | LangSmith, GitHub Actions         | Plan-dependent                 | Check your plan's trace and minute limits.                                                  |
-| **AWS total, steady state**       | **~$13-17/month**              | Without the demo stack. Anthropic is billed separately (~$2-9/month, capped at $15).        |
+| **AWS total, steady state**       | **~$13-17/month**              | Without the demo stack. Anthropic is billed separately (see the row above; the monthly limit is $15 by default, so raise `llm.max_cost_usd_per_month` for a noisy account).        |
 
 The things that can surprise you:
 
