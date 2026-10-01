@@ -160,6 +160,9 @@ class CloudtrailCollectorConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     lookback_days: int = 8
+    # Wall-clock cap on the LookupEvents pagination so this collector can never
+    # run the collect Lambda into its 900s timeout; hitting it yields a warning.
+    max_seconds: int = 240
 
 
 class CollectorsConfig(BaseModel):

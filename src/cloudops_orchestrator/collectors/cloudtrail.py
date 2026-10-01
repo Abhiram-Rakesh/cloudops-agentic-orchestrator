@@ -2,7 +2,8 @@
 source of findings on its own (``DRIFT-004-4.3``: actor, event, time,
 masked source IP, and any ``change-ticket`` request-parameter/tag).
 
-Live: ``cloudtrail:LookupEvents`` over the run's lookback window.
+Live: ``cloudtrail:LookupEvents`` (write events only) over the run's
+lookback window, under a wall-clock budget.
 Fixture: ``{fixtures_dir}/cloudtrail/events.json`` (absent/empty means no
 attribution data — drift findings stay unattributed, per DRIFT-003-3.1's
 "cannot be attributed" row).
@@ -11,6 +12,7 @@ attribution data — drift findings stay unattributed, per DRIFT-003-3.1's
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime
 from typing import Any
 
@@ -35,13 +37,14 @@ def _parse_time(value: str | datetime | None, fallback: datetime) -> datetime:
         return fallback
 
 
-def _load_events(ctx: CollectorContext) -> list[dict[str, Any]]:
+def _load_events(ctx: CollectorContext) -> tuple[list[dict[str, Any]], bool]:
+    """Return ``(events, truncated)``; ``truncated`` means the time budget ran out."""
     if ctx.fixtures_dir is not None:
         path = ctx.fixtures_dir / "cloudtrail" / "events.json"
         if not path.exists():
-            return []
+            return [], False
         result: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
-        return result
+        return result, False
 
     from datetime import timedelta
 
@@ -50,20 +53,27 @@ def _load_events(ctx: CollectorContext) -> list[dict[str, Any]]:
     client = get_client("cloudtrail", region_name=ctx.settings.aws.region)
     events: list[dict[str, Any]] = []
     paginator = client.get_paginator("lookup_events")
-    lookback_days = ctx.settings.collectors.cloudtrail.lookback_days
-    # paginate() with no StartTime/EndTime pages through the account's ENTIRE
-    # CloudTrail history (up to 90 days) -- harmless on an empty account, but
-    # LookupEvents is rate-limited and a real, actively-used account can have
-    # thousands of events, enough to exceed the collect Lambda's 15-minute
-    # timeout outright. Found live: collect timed out at exactly 900.00s with
-    # zero DynamoDB writes ever made (ruled out via CloudWatch metrics),
-    # meaning it never even finished collecting -- see
-    # README.md (Troubleshooting).
+    config = ctx.settings.collectors.cloudtrail
+    # Attribution only needs events that *changed* something, so ask for
+    # write events (ReadOnly=false). Read-only calls (Describe/Get/List from
+    # Config, Security Hub, Prowler, the console...) are the vast majority of
+    # CloudTrail volume, and LookupEvents is rate-limited to ~2 requests/s at
+    # 50 events per page: on a busy day an unfiltered 8-day pull took hours
+    # and ran the collect Lambda into its 15-minute timeout before it wrote
+    # anything (found live 2026-10-01; filtering to writes cut it to ~45 s).
+    # The wall-clock budget below is the backstop if that ever recurs.
+    deadline = time.monotonic() + config.max_seconds
+    truncated = False
     for page in paginator.paginate(
-        StartTime=ctx.now - timedelta(days=lookback_days), EndTime=ctx.now
+        StartTime=ctx.now - timedelta(days=config.lookback_days),
+        EndTime=ctx.now,
+        LookupAttributes=[{"AttributeKey": "ReadOnly", "AttributeValue": "false"}],
     ):
         events.extend(page.get("Events", []))
-    return events
+        if time.monotonic() >= deadline:
+            truncated = True
+            break
+    return events, truncated
 
 
 def find_attribution(
@@ -84,8 +94,15 @@ def find_attribution(
 
 
 def collect(ctx: CollectorContext) -> CollectorResult:
-    events = _load_events(ctx)
-    return CollectorResult(findings=[], raw_evidence={"events": events})
+    events, truncated = _load_events(ctx)
+    warnings = []
+    if truncated:
+        limit = ctx.settings.collectors.cloudtrail.max_seconds
+        warnings.append(
+            f"CloudTrail lookup stopped after {limit}s with {len(events)} event(s); "
+            "attribution for older changes may be missing"
+        )
+    return CollectorResult(findings=[], raw_evidence={"events": events}, warnings=warnings)
 
 
 __all__ = ["SOURCE", "collect", "find_attribution"]

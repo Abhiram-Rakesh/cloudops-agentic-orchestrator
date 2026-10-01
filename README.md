@@ -610,6 +610,7 @@ Settings live in `config/settings.dev.yaml` (deployed) and `config/settings.loca
 | `collectors.prowler`                        | enabled, `max_age_days: 8`      | Staleness warning threshold for the Prowler artifact                     |
 | `collectors.drift.workspaces`               | `orders-demo` (`demo/infra`)    | Terraform workspaces checked for drift                                   |
 | `collectors.cost_explorer.max_calls`        | `2`                             | Cost Explorer calls per run                                              |
+| `collectors.cloudtrail.lookback_days` / `max_seconds` | `8` / `240`            | CloudTrail attribution window (write events only) and its wall-clock cap, so `Collect` cannot time out |
 | `refresh.max_wait_minutes`                  | `30`                            | How long `--refresh` waits for scanner workflows                         |
 | `remediation.terraform_pr.allowed_paths`    | `["demo/infra/**"]`             | Paths the PR agent may edit (also enforced in code and CI)               |
 | `remediation.runbook_executor`              | `{enabled: true, dry_run: true}`| `dry_run: true` makes zero real `StartAutomationExecution` calls         |
@@ -810,7 +811,7 @@ Each entry was a real failure found during live deployment.
 | `Collect` fails with `AccessDeniedException` on `securityhub:GetFindings` (or Cost Explorer, Access Analyzer, CloudTrail) | Collectors run with the Lambda's own execution role, which lacked the read permissions its code calls | The `collect` and `aggregate` role policies grant exactly those read actions. A separate `reader` role exists but no code assumes it yet |
 | `Collect` fails: `FileNotFoundError: /var/config/prowler_control_map.yaml` | Path resolution differs between the repo layout and the flattened Lambda zip | `_find_repo_root` walks up to the first ancestor containing `config/`, so it works in both layouts |
 | `Collect` fails: `'str' object cannot be interpreted as an integer` | boto3 returns native `datetime`s, not strings | `_parse_time` handles both |
-| `Collect` times out at 900 s | Unbounded CloudTrail `LookupEvents` pagination | `collectors.cloudtrail.lookback_days` (default 8) bounds the query |
+| `Collect` times out at 900 s with zero DynamoDB writes (`Sandbox.Timedout`) | The CloudTrail collector pages `LookupEvents` (50 events per page, ~2 requests/s). Unfiltered, a busy account (deploys, `demo-up`, Config and Security Hub read calls) has hours of events in the lookback window | The collector asks for write events only (`ReadOnly=false`), which are the only ones attribution needs, and stops after `collectors.cloudtrail.max_seconds` (default 240) with a warning. Check `Collect`'s duration in the execution history: it should be a few minutes, not 13+ |
 | `reconcile_resolved` fails: `The table does not have the specified index: GSI1` | DynamoDB index names are case-sensitive; the table's index is `gsi1` | Queries use `gsi1` |
 | `DomainBatch` fails: `Read-only file system: '.cache'` | Lambda's filesystem is read-only except `/tmp` | The KB index is staged in `/tmp` when running in Lambda (`kb/local_paths.py`) |
 | `Aggregate` fails: `KeyError: 'started_at'` | `Collect`'s return value replaces the whole state | `collect` returns `started_at` explicitly |

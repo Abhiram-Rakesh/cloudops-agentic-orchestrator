@@ -5,8 +5,10 @@ cost_explorer, cloudtrail, and the registry that ties everything together.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from cloudops_orchestrator.collectors import (
     access_analyzer,
@@ -108,6 +110,79 @@ class TestCostExplorer:
 
     def test_no_fixture_file_returns_empty(self, tmp_path: Path) -> None:
         assert cost_explorer.collect(_ctx(tmp_path)).findings == []
+
+
+class _FakeLookupPaginator:
+    def __init__(self, pages: list[dict[str, object]]) -> None:
+        self.pages = pages
+        self.kwargs: dict[str, object] = {}
+
+    def paginate(self, **kwargs: object) -> object:
+        self.kwargs = kwargs
+        return iter(self.pages)
+
+
+class _FakeCloudtrailClient:
+    def __init__(self, paginator: _FakeLookupPaginator) -> None:
+        self.paginator = paginator
+
+    def get_paginator(self, name: str) -> _FakeLookupPaginator:
+        assert name == "lookup_events"
+        return self.paginator
+
+
+class TestCloudtrailLive:
+    def _live_ctx(self, tmp_path: Path, max_seconds: int = 240) -> CollectorContext:
+        ctx = _ctx(tmp_path)
+        cloudtrail_config = ctx.settings.collectors.cloudtrail.model_copy(
+            update={"max_seconds": max_seconds}
+        )
+        collectors = ctx.settings.collectors.model_copy(update={"cloudtrail": cloudtrail_config})
+        settings = ctx.settings.model_copy(update={"collectors": collectors})
+        return CollectorContext(
+            run_id=ctx.run_id,
+            settings=settings,
+            account=ctx.account,
+            now=ctx.now,
+            fixtures_dir=None,
+        )
+
+    def test_requests_write_events_only_in_the_lookback_window(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        paginator = _FakeLookupPaginator([{"Events": [{"EventName": "RunInstances"}]}])
+        monkeypatch.setattr(
+            "cloudops_orchestrator.aws.clients.get_client",
+            lambda *_a, **_k: _FakeCloudtrailClient(paginator),
+        )
+        ctx = self._live_ctx(tmp_path)
+
+        result = cloudtrail.collect(ctx)
+
+        assert result.raw_evidence["events"] == [{"EventName": "RunInstances"}]
+        assert result.warnings == []
+        assert paginator.kwargs["LookupAttributes"] == [
+            {"AttributeKey": "ReadOnly", "AttributeValue": "false"}
+        ]
+        assert paginator.kwargs["EndTime"] == ctx.now
+        assert paginator.kwargs["StartTime"] == ctx.now - timedelta(
+            days=ctx.settings.collectors.cloudtrail.lookback_days
+        )
+
+    def test_time_budget_stops_pagination_with_a_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pages: list[dict[str, object]] = [{"Events": [{"EventName": f"E{i}"}]} for i in range(5)]
+        paginator = _FakeLookupPaginator(pages)
+        monkeypatch.setattr(
+            "cloudops_orchestrator.aws.clients.get_client",
+            lambda *_a, **_k: _FakeCloudtrailClient(paginator),
+        )
+
+        result = cloudtrail.collect(self._live_ctx(tmp_path, max_seconds=0))
+
+        assert len(result.raw_evidence["events"]) == 1  # stopped after the first page
+        assert any("CloudTrail lookup stopped" in w for w in result.warnings)
 
 
 class TestCloudtrail:
