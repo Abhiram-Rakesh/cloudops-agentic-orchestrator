@@ -289,11 +289,37 @@ def _interpolate(text: str, env: Mapping[str, str]) -> str:
     return result
 
 
+def read_dotenv(path: str | Path = ".env") -> dict[str, str]:
+    """Parse a simple ``KEY=VALUE`` file (``#`` comments, optional quotes).
+
+    Returns ``{}`` when the file does not exist. Never touches ``os.environ``.
+    """
+    dotenv_path = Path(path)
+    if not dotenv_path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
 def load_settings(path: str | Path, *, env: Mapping[str, str] | None = None) -> Settings:
-    """Load and validate a settings YAML file, interpolating ``${VAR}`` placeholders."""
+    """Load and validate a settings YAML file, interpolating ``${VAR}`` placeholders.
+
+    With no explicit ``env``, placeholders resolve from the process environment,
+    falling back to a ``.env`` file in the working directory (local convenience,
+    see ``.env.example``). The process environment always wins.
+    """
     import os
 
-    resolved_env: Mapping[str, str] = env if env is not None else os.environ
+    resolved_env: Mapping[str, str] = env if env is not None else {**read_dotenv(), **os.environ}
     raw_text = Path(path).read_text(encoding="utf-8")
     interpolated = _interpolate(raw_text, resolved_env)
     data = yaml.safe_load(interpolated)

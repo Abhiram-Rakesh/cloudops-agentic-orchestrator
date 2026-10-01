@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 
 from cloudops_orchestrator import __version__
-from cloudops_orchestrator.config import load_settings
+from cloudops_orchestrator.config import ConfigError, Settings, load_settings
 
 app = typer.Typer(
     name="cloudops",
@@ -25,6 +25,19 @@ kb_app = typer.Typer(help="Knowledge base commands")
 app.add_typer(kb_app, name="kb")
 
 console = Console()
+
+
+def _load_settings_or_exit(config: str) -> Settings:
+    """Load settings, turning a missing-variable error into a short message."""
+    try:
+        return load_settings(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        console.print(
+            "Export those variables in your shell, or put them in a [bold].env[/bold] file in "
+            "the repo root (see .env.example)."
+        )
+        raise typer.Exit(code=1) from exc
 
 
 @app.callback(invoke_without_command=False)
@@ -48,7 +61,7 @@ def kb_build(
     """Build the SOP knowledge base index."""
     from cloudops_orchestrator.kb.index_builder import build_index
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     output_path = build_index(settings, embeddings=embeddings, upload=upload, kb_dir=kb_dir)
     console.print(f"Wrote index to {output_path}")
 
@@ -77,7 +90,7 @@ def kb_query(
     """Query the built index (debugging aid for retrieval tuning)."""
     from cloudops_orchestrator.kb.retriever import query_index
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     for chunk in query_index(settings, text=text, domain=domain):
         console.print(f"{chunk.clause_id or chunk.sop_id} (score={chunk.score:.3f}): {chunk.title}")
 
@@ -97,7 +110,7 @@ def trials_status(
     next steps (see README.md (Security trial lifecycle))."""
     from datetime import UTC, datetime
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     in_trial = settings.collectors.security_hub.enabled
     phase = (
         "A -- trial (Security Hub + GuardDuty + Config + Prowler, in parallel)"
@@ -151,7 +164,7 @@ def exceptions_list(config: Annotated[str, typer.Option()] = "config/settings.de
     """List active SOP exceptions."""
     from cloudops_orchestrator.store.exceptions import list_exceptions
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     exceptions = list_exceptions(settings)
     if not exceptions:
         console.print("No exceptions on file.")
@@ -176,7 +189,7 @@ def exceptions_add(
     """Record a time-bound SOP exception (SHARED-003)."""
     from cloudops_orchestrator.store.exceptions import add_exception
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     exception = add_exception(
         settings,
         clause_id=clause,
@@ -199,7 +212,7 @@ def exceptions_remove(
     """Remove a SOP exception early."""
     from cloudops_orchestrator.store.exceptions import remove_exception
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     remove_exception(settings, exception_id=exception_id)
     console.print(f"Removed exception {exception_id}")
 
@@ -230,7 +243,7 @@ def doctor(
     )
     from cloudops_orchestrator.integrations.github_client import GithubClient
 
-    settings = load_settings(config)
+    settings = _load_settings_or_exit(config)
     region = settings.aws.region
     prefix = settings.storage.parameter_prefix
     sts = get_sts_client(region_name=region)

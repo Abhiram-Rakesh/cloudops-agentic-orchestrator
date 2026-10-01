@@ -71,10 +71,6 @@ Screenshots to add (save in screenshots/):
 
 ![HTML report](screenshots/html-report.png)
 
-### Terraform PR opened by the agent (draft, plan comment, plan hash)
-
-![Agent Terraform PR](screenshots/github-agent-terraform-pr.png)
-
 ### LangSmith trace of one domain batch
 
 ![LangSmith trace](screenshots/langsmith-trace.png)
@@ -83,9 +79,6 @@ Screenshots to add (save in screenshots/):
 
 ![cloudops doctor](screenshots/doctor-output.png)
 
-### Drift detected after simulated ClickOps
-
-![Drift findings](screenshots/slack-drift-findings.png)
 -->
 
 ---
@@ -476,7 +469,7 @@ export GH_OWNER=<your github user> REPO_NAME=cloudops-agentic-orchestrator-lite
 uv run cloudops doctor --config config/settings.dev.yaml
 ```
 
-`config/settings.dev.yaml` interpolates those `${VAR}` placeholders at load time. `doctor` is read-only and never mutates anything; every check degrades to `WARN`/`SKIP` instead of crashing the command.
+`config/settings.dev.yaml` interpolates those `${VAR}` placeholders at load time. Instead of exporting them, you can copy `.env.example` to `.env` (gitignored) and fill it in: the CLI reads `.env` from the repo root for any variable your shell hasn't set. If any are missing, the command prints which ones. `doctor` is read-only and never mutates anything; every check degrades to `WARN`/`SKIP` instead of crashing the command.
 
 **Expected outcome**
 
