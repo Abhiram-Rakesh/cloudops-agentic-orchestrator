@@ -1,0 +1,100 @@
+name: drift
+
+on:
+  schedule:
+    # 08:00 IST Monday = 02:30 UTC Monday — after prowler.yml, still ahead
+    # of the 08:45 IST state machine run.
+    - cron: "30 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: drift-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  drift:
+    name: demo/infra drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.19"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.9"
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.SCANNER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve artifacts bucket name
+        run: echo "BUCKET=${{ vars.NAME_PREFIX }}-$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_ENV"
+
+      - name: terraform init (demo/infra)
+        working-directory: demo/infra
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="key=demo/dev/terraform.tfstate"
+
+      - name: Check whether the demo stack has any resources
+        id: check_deployed
+        working-directory: demo/infra
+        run: |
+          COUNT="$(terraform state list | wc -l)"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload "not deployed" marker
+        if: steps.check_deployed.outputs.count == '0'
+        run: |
+          echo '{"deployed": false}' > /tmp/marker.json
+          aws s3 cp /tmp/marker.json "s3://$BUCKET/drift/latest/orders-demo/marker.json"
+
+      - name: terraform plan -refresh-only
+        if: steps.check_deployed.outputs.count != '0'
+        id: plan
+        working-directory: demo/infra
+        run: |
+          set +e
+          terraform plan -refresh-only -lock=false -detailed-exitcode -out=tfplan.bin
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          # 0 = no drift, 2 = drift detected (both OK); 1 = a real failure.
+          test "${{ steps.plan.outputs.exit_code }}" != "1"
+
+      - name: terraform show -json (plan.json)
+        if: steps.check_deployed.outputs.count != '0'
+        working-directory: demo/infra
+        run: terraform show -json tfplan.bin > plan.json
+
+      - name: terraform show -json (current state, for inventory.json)
+        if: steps.check_deployed.outputs.count != '0'
+        working-directory: demo/infra
+        run: terraform show -json > state.json
+
+      - name: Build inventory.json
+        if: steps.check_deployed.outputs.count != '0'
+        run: uv run python scripts/build_inventory.py demo/infra/state.json demo/infra/inventory.json
+
+      - name: Upload plan.json + inventory.json
+        if: steps.check_deployed.outputs.count != '0'
+        run: |
+          RUN_ID="${{ github.run_id }}"
+          for KEY in "$RUN_ID" latest; do
+            aws s3 cp demo/infra/plan.json "s3://$BUCKET/drift/$KEY/orders-demo/plan.json"
+            aws s3 cp demo/infra/inventory.json "s3://$BUCKET/drift/$KEY/orders-demo/inventory.json"
+          done

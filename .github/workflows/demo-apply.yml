@@ -1,0 +1,101 @@
+name: demo-apply
+
+# Push to main touching demo/infra/** (an agent's merged PR), or a
+# workflow_dispatch carrying a terraform_revert_dispatch action's context
+# (remediation/revert_dispatch.py). Either way this is the only place
+# `terraform apply` runs against demo/infra — never the agent itself.
+on:
+  push:
+    branches: [main]
+    paths: ["demo/infra/**"]
+  workflow_dispatch:
+    inputs:
+      action_id:
+        description: "The approved ActionPlan's action_id"
+        required: true
+      plan_hash:
+        description: "The approved ActionPlan's plan_hash — must match what's stored"
+        required: true
+      reason:
+        description: "Why this revert is being dispatched"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: demo-apply
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  apply:
+    name: terraform apply (demo/infra)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.DEMO_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Skip if the demo stack is down
+        id: demo_state
+        run: |
+          STATE="$(aws ssm get-parameter --name "/${{ vars.NAME_PREFIX }}/${{ vars.ENVIRONMENT }}/demo_state" --query 'Parameter.Value' --output text)"
+          echo "state=$STATE" >> "$GITHUB_OUTPUT"
+          if [ "$STATE" != "up" ]; then
+            echo "demo_state is '$STATE', not 'up' — skipping apply."
+          fi
+
+      - name: Verify the approval record (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch' && steps.demo_state.outputs.state == 'up'
+        run: |
+          ITEM="$(aws dynamodb get-item \
+            --table-name "${{ vars.NAME_PREFIX }}-state" \
+            --key "{\"pk\": {\"S\": \"ACTION#${{ inputs.action_id }}\"}, \"sk\": {\"S\": \"PLAN\"}}" \
+            --output json)"
+          if [ -z "$ITEM" ] || [ "$(echo "$ITEM" | jq -r '.Item // empty')" = "" ]; then
+            echo "::error::No ActionPlan found for action_id=${{ inputs.action_id }}"
+            exit 1
+          fi
+          ACTION_TYPE="$(echo "$ITEM" | jq -r '.Item.action_type.S')"
+          STATUS="$(echo "$ITEM" | jq -r '.Item.status.S')"
+          PLAN_HASH="$(echo "$ITEM" | jq -r '.Item.plan_hash.S')"
+          if [ "$ACTION_TYPE" != "terraform_revert_dispatch" ]; then
+            echo "::error::action_id=${{ inputs.action_id }} is action_type=$ACTION_TYPE, not terraform_revert_dispatch"
+            exit 1
+          fi
+          if [ "$STATUS" != "APPROVED" ] && [ "$STATUS" != "EXECUTING" ]; then
+            echo "::error::action_id=${{ inputs.action_id }} has status=$STATUS, expected APPROVED or EXECUTING"
+            exit 1
+          fi
+          if [ "$PLAN_HASH" != "${{ inputs.plan_hash }}" ]; then
+            echo "::error::plan_hash mismatch for action_id=${{ inputs.action_id }}"
+            exit 1
+          fi
+          echo "Approval record verified: action_id=${{ inputs.action_id }} status=$STATUS reason='${{ inputs.reason }}'"
+
+      - uses: hashicorp/setup-terraform@v4
+        if: steps.demo_state.outputs.state == 'up'
+        with:
+          terraform_version: "1.15.9"
+          terraform_wrapper: false
+
+      - name: terraform init
+        if: steps.demo_state.outputs.state == 'up'
+        working-directory: demo/infra
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: terraform apply
+        if: steps.demo_state.outputs.state == 'up'
+        working-directory: demo/infra
+        run: terraform apply -auto-approve

@@ -1,0 +1,38 @@
+name: agent-pr-guard
+
+# Defense in depth alongside remediation/path_guard.py (which the agent
+# itself checks before ever committing): if a PR looks like it came from
+# the Terraform PR agent (head branch cloudops/* or label cloudops-agent),
+# every changed file must be under demo/infra/** — no exceptions, even if
+# remediation.terraform_pr.allowed_paths were ever misconfigured.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: verify agent PR only touches demo/infra/**
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'cloudops/') || contains(github.event.pull_request.labels.*.name, 'cloudops-agent')
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: List changed files and verify they're all under demo/infra/**
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          echo "Changed files:"
+          echo "$CHANGED"
+          OUTSIDE="$(echo "$CHANGED" | grep -v '^demo/infra/' || true)"
+          if [ -n "$OUTSIDE" ]; then
+            echo "::error::Agent PR touches file(s) outside demo/infra/**:"
+            echo "$OUTSIDE"
+            exit 1
+          fi

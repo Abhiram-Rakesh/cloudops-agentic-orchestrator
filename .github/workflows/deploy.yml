@@ -1,0 +1,113 @@
+name: deploy
+
+# Human-triggered only: this is the one workflow that actually mutates the
+# orchestrator's live AWS resources. Restricted to the repo owner as a
+# second gate beyond workflow_dispatch itself.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  deploy:
+    name: build + terraform apply (infra/envs/dev)
+    runs-on: ubuntu-latest
+    if: github.actor == github.repository_owner
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+
+      - name: uv sync
+        run: uv sync --frozen
+
+      - name: Build Lambda deployment zip
+        run: bash scripts/build_lambda_zip.sh
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.9"
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform init
+        working-directory: infra/envs/dev
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ env.AWS_REGION }}"
+
+      - name: look up existing Cost Anomaly Monitor
+        id: anomaly_monitor
+        working-directory: infra/envs/dev
+        # AWS accounts get a DIMENSIONAL/SERVICE cost anomaly monitor
+        # auto-created (named "Default-Services-Monitor") independently of
+        # this stack, and the account-wide quota is one such monitor --
+        # creating a second one fails outright. Read-only lookup (Hard Rule
+        # #2 permits reads); see README.md (Troubleshooting).
+        #
+        # Only do this lookup if Terraform doesn't already track its own
+        # monitor. Skipping this check once caused a real incident: a prior
+        # apply created its own monitor (none existed yet at the time), a
+        # later apply's live lookup found that same monitor and mistook it
+        # for something external, and Terraform destroyed its own tracked
+        # resource to "adopt" it -- orphaning the anomaly subscription
+        # (MonitorArnList silently went empty). See
+        # README.md (Troubleshooting).
+        run: |
+          if terraform state list 2>/dev/null | grep -qx 'module.cost_free.aws_ce_anomaly_monitor.service\[0\]'; then
+            ARN=""
+          else
+            ARN=$(aws ce get-anomaly-monitors \
+              --query "AnomalyMonitors[?MonitorType=='DIMENSIONAL' && MonitorDimension=='SERVICE'] | [0].MonitorArn" \
+              --output text)
+            if [ "$ARN" = "None" ]; then ARN=""; fi
+          fi
+          echo "arn=$ARN" >> "$GITHUB_OUTPUT"
+
+      - name: terraform plan
+        working-directory: infra/envs/dev
+        # These six variables have no default in variables.tf (deliberately
+        # -- there's no safe guess for a Slack channel or an approver list)
+        # and terraform.tfvars is gitignored (not secret, but not something
+        # to commit either -- see README.md (Deployment)), so a fresh checkout has
+        # no other source for them: they come from repo variables, set once
+        # per README.md (Deployment) step 2b.
+        run: |
+          terraform plan -out=tfplan.bin \
+            -var="alert_email=${{ vars.ALERT_EMAIL }}" \
+            -var="github_owner=${{ github.repository_owner }}" \
+            -var="repo_name=${{ github.event.repository.name }}" \
+            -var="slack_channel_id=${{ vars.SLACK_CHANNEL_ID }}" \
+            -var="trial_start_date=${{ vars.TRIAL_START_DATE }}" \
+            -var='approver_slack_ids=${{ vars.APPROVER_SLACK_IDS }}' \
+            -var="existing_service_anomaly_monitor_arn=${{ steps.anomaly_monitor.outputs.arn }}"
+
+      - name: terraform apply
+        working-directory: infra/envs/dev
+        run: terraform apply -auto-approve tfplan.bin
+
+  kb-sync:
+    name: sync knowledge base index
+    needs: deploy
+    uses: ./.github/workflows/kb-sync.yml
+    permissions:
+      id-token: write
+      contents: read

@@ -1,0 +1,54 @@
+name: prowler
+
+on:
+  schedule:
+    # 07:30 IST Monday = 02:00 UTC Monday — ahead of the 08:45 IST state
+    # machine run, since GitHub schedules can be delayed (collectors warn
+    # on stale data if this doesn't land in time).
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: prowler-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  prowler:
+    name: prowler scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.SCANNER_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Prowler
+        run: pip install --no-input prowler-cloud==5.43.0
+
+      - name: Run Prowler (FSBP + CIS 3.0, OCSF output)
+        run: |
+          mkdir -p out
+          prowler aws \
+            --region "$AWS_REGION" \
+            --compliance aws_foundational_security_best_practices_aws cis_3.0_aws \
+            --output-formats json-ocsf \
+            --output-directory out \
+            --output-filename prowler-findings \
+            --ignore-exit-code-3
+
+      - name: Upload to S3 (dated + latest)
+        run: |
+          DATE="$(date -u +%Y-%m-%d)"
+          BUCKET="${{ vars.NAME_PREFIX }}-$(aws sts get-caller-identity --query Account --output text)"
+          aws s3 cp out/prowler-findings.ocsf.json "s3://$BUCKET/prowler/$DATE/findings.json"
+          aws s3 cp out/prowler-findings.ocsf.json "s3://$BUCKET/prowler/latest/findings.json"

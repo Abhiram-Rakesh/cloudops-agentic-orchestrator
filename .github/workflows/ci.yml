@@ -1,0 +1,124 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  NAME_PREFIX: ${{ vars.NAME_PREFIX }}
+  ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+
+jobs:
+  python:
+    name: python (lint, typecheck, test, kb, package)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.19"
+          enable-cache: true
+
+      - name: uv sync
+        run: uv sync --frozen --all-extras
+
+      - name: ruff check
+        run: uv run ruff check src tests
+
+      - name: ruff format --check
+        run: uv run ruff format --check src tests
+
+      - name: mypy --strict (src/)
+        run: uv run mypy
+
+      - name: pytest (coverage gate 80%)
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: cloudops kb validate
+        run: uv run cloudops kb build --embeddings none && uv run cloudops kb validate
+
+      - name: demo fixtures/docs are up to date with demo_matrix.yaml
+        run: uv run python scripts/gen_demo_artifacts.py --check
+
+      - name: build lambda package + bundle-size check
+        run: bash scripts/build_lambda_zip.sh
+
+      - name: upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          retention-days: 14
+
+  terraform:
+    name: terraform (fmt, validate, tflint, checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.15.9"
+          terraform_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: "v0.49.0"
+
+      - name: terraform fmt -check (repo-wide)
+        run: terraform fmt -check -recursive .
+
+      - name: terraform init/validate (infra/envs/dev)
+        working-directory: infra/envs/dev
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: terraform init/validate (demo/infra)
+        working-directory: demo/infra
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: tflint (infra/envs/dev)
+        working-directory: infra/envs/dev
+        run: |
+          tflint --init
+          tflint
+
+      - name: tflint (demo/infra)
+        working-directory: demo/infra
+        run: |
+          tflint --init
+          tflint
+
+      - name: Install checkov
+        run: pip install --no-input checkov==3.3.19
+
+      - name: checkov (infra/)
+        run: checkov --config-file .checkov.yml
+
+      - name: checkov (demo/infra)
+        run: checkov -d demo/infra --compact --quiet
+
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
