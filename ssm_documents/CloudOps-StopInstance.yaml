@@ -1,0 +1,61 @@
+# CloudOps-StopInstance (§9.3) — COST-class remediation.
+# Stops a non-production EC2 instance. Default tier T1 per
+# config/policy/action_allowlist.yaml.
+#
+# VERIFY BEFORE DEPLOY: see CloudOps-EnableS3BlockPublicAccess.yaml's note.
+schemaVersion: "0.3"
+description: "Stop a non-production EC2 instance, unless tagged cloudops:protected=true."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "ARN of the role Automation assumes to perform these actions."
+  InstanceId:
+    type: String
+    description: "The EC2 instance to stop."
+mainSteps:
+  - name: CheckProtectedTag
+    action: aws:executeScript
+    isCritical: true
+    inputs:
+      Runtime: python3.11
+      Handler: check_protected
+      InputPayload:
+        ResourceId: "{{ InstanceId }}"
+      Script: |-
+        import boto3
+
+        def check_protected(events, context):
+            client = boto3.client("ec2")
+            response = client.describe_tags(
+                Filters=[{"Name": "resource-id", "Values": [events["ResourceId"]]}]
+            )
+            protected = any(
+                t["Key"] == "cloudops:protected" and t["Value"] == "true"
+                for t in response.get("Tags", [])
+            )
+            return {"protected": "true" if protected else "false"}
+    outputs:
+      - Name: Protected
+        Selector: $.Payload.protected
+        Type: String
+  - name: AbortIfProtected
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AbortedProtectedResource
+          Variable: "{{ CheckProtectedTag.Protected }}"
+          StringEquals: "true"
+      Default: StopInstance
+  - name: StopInstance
+    action: aws:changeInstanceState
+    isEnd: true
+    inputs:
+      InstanceIds:
+        - "{{ InstanceId }}"
+      DesiredState: stopped
+  - name: AbortedProtectedResource
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S

@@ -1,0 +1,160 @@
+{
+  "Comment": "CloudOps weekly review (Standard workflow) - §8.1. Task Resource values are templatefile() placeholders filled in by infra/modules/orchestration with real Lambda ARNs.",
+  "StartAt": "InitRun",
+  "States": {
+    "InitRun": {
+      "Type": "Task",
+      "Resource": "${init_run_arn}",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "FailureNotifier" }],
+      "Next": "ProceedCheck"
+    },
+    "ProceedCheck": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.proceed", "BooleanEquals": false, "Next": "BudgetExceeded" }],
+      "Default": "RefreshRequestedCheck"
+    },
+    "BudgetExceeded": {
+      "Type": "Succeed",
+      "Comment": "Month-to-date LLM budget already exhausted - init_run posted a Slack notice and this run is a deliberate no-op."
+    },
+    "RefreshRequestedCheck": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.refresh_requested", "BooleanEquals": true, "Next": "InitRefreshWaitCount" }],
+      "Default": "Collect"
+    },
+    "InitRefreshWaitCount": {
+      "Type": "Pass",
+      "Result": 0,
+      "ResultPath": "$.refresh_wait_count",
+      "Next": "WaitRefresh"
+    },
+    "WaitRefresh": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckRefresh"
+    },
+    "CheckRefresh": {
+      "Type": "Task",
+      "Resource": "${init_run_arn}",
+      "Parameters": {
+        "mode": "check_refresh",
+        "refresh_dispatched_at.$": "$.refresh_dispatched_at"
+      },
+      "ResultPath": "$.refresh_check",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "FailureNotifier" }],
+      "Next": "RefreshDoneCheck"
+    },
+    "RefreshDoneCheck": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.refresh_check.refresh_done", "BooleanEquals": true, "Next": "Collect" }],
+      "Default": "IncrementRefreshWaitCount"
+    },
+    "IncrementRefreshWaitCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "count.$": "States.MathAdd($.refresh_wait_count, 1)"
+      },
+      "ResultPath": "$.refresh_wait_count_wrapper",
+      "Next": "RefreshLoopBoundCheck"
+    },
+    "RefreshLoopBoundCheck": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.refresh_wait_count_wrapper.count",
+          "NumericGreaterThanEquals": 30,
+          "Next": "Collect"
+        }
+      ],
+      "Default": "WaitRefresh"
+    },
+    "Collect": {
+      "Type": "Task",
+      "Resource": "${collect_arn}",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "FailureNotifier" }],
+      "Next": "DomainBatches"
+    },
+    "DomainBatches": {
+      "Type": "Map",
+      "ItemsPath": "$.batches",
+      "MaxConcurrency": 2,
+      "ToleratedFailurePercentage": 100,
+      "ResultPath": "$.batch_results",
+      "ItemSelector": {
+        "run_id.$": "$.run_id",
+        "domain.$": "$$.Map.Item.Value.domain",
+        "batch_id.$": "$$.Map.Item.Value.batch_id"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "DomainBatch",
+        "States": {
+          "DomainBatch": {
+            "Type": "Task",
+            "Resource": "${domain_batch_arn}",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "States.Timeout"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "FailureNotifier" }],
+      "Next": "Aggregate"
+    },
+    "Aggregate": {
+      "Type": "Task",
+      "Resource": "${aggregate_arn}",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "States.Timeout"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.error", "Next": "FailureNotifier" }],
+      "Next": "RunSucceeded"
+    },
+    "RunSucceeded": {
+      "Type": "Succeed"
+    },
+    "FailureNotifier": {
+      "Type": "Task",
+      "Resource": "${failure_notifier_arn}",
+      "Next": "RunFailed"
+    },
+    "RunFailed": {
+      "Type": "Fail"
+    }
+  }
+}

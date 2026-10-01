@@ -1,0 +1,69 @@
+{
+  "instances": [
+    {
+      "instance_id": "i-0aaaaaaaaaaaaaaaa",
+      "name": "orders-demo-web",
+      "tags": {
+        "owner": "orders-team",
+        "environment": "dev",
+        "application": "orders"
+      },
+      "state": "running",
+      "instance_type": "t4g.micro",
+      "avg_cpu_pct_7d": 35.0,
+      "avg_network_bytes_per_day": 52428800
+    },
+    {
+      "instance_id": "i-0bbbbbbbbbbbbbbbb",
+      "name": "orders-demo-batch-worker",
+      "tags": {
+        "environment": "dev",
+        "application": "orders"
+      },
+      "state": "running",
+      "instance_type": "t4g.micro",
+      "avg_cpu_pct_7d": 1.2,
+      "avg_network_bytes_per_day": 524288
+    }
+  ],
+  "volumes": [
+    {
+      "volume_id": "vol-0ccccccccccccccc",
+      "name": "orders-demo-scratch",
+      "tags": {
+        "environment": "dev",
+        "application": "orders"
+      },
+      "size_gb": 1,
+      "volume_type": "gp2",
+      "encrypted": false,
+      "attached": false,
+      "days_unattached": 14
+    }
+  ],
+  "addresses": [
+    {
+      "allocation_id": "eipalloc-0ddddddddddddddd",
+      "name": "orders-demo-eip-unused",
+      "tags": {
+        "environment": "dev",
+        "application": "orders"
+      },
+      "associated": false,
+      "hours_unassociated": 168.0
+    }
+  ],
+  "snapshots": [],
+  "buckets": [
+    {
+      "name": "orders-demo-exports",
+      "tags": {
+        "owner": "orders-team",
+        "environment": "dev",
+        "application": "orders"
+      },
+      "has_lifecycle_rule": false
+    }
+  ],
+  "compute_optimizer": []
+}

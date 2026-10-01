@@ -1,0 +1,127 @@
+{
+  "root_module": {
+    "resources": [
+      {
+        "address": "awsec2vpc.orders_demo_vpc",
+        "type": "AwsEc2Vpc",
+        "name": "orders-demo-vpc",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Vpc/orders-demo-vpc",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2securitygroup.orders_demo_web_admin_sg",
+        "type": "AwsEc2SecurityGroup",
+        "name": "orders-demo-web-admin-sg",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-web-admin-sg",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2securitygroup.orders_demo_app_sg",
+        "type": "AwsEc2SecurityGroup",
+        "name": "orders-demo-app-sg",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-app-sg",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2instance.orders_demo_web",
+        "type": "AwsEc2Instance",
+        "name": "orders-demo-web",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2instance.orders_demo_batch_worker",
+        "type": "AwsEc2Instance",
+        "name": "orders-demo-batch-worker",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-batch-worker",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2volume.orders_demo_scratch",
+        "type": "AwsEc2Volume",
+        "name": "orders-demo-scratch",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Volume/orders-demo-scratch",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsec2eip.orders_demo_eip_unused",
+        "type": "AwsEc2Eip",
+        "name": "orders-demo-eip-unused",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Eip/orders-demo-eip-unused",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awss3bucket.orders_demo_exports",
+        "type": "AwsS3Bucket",
+        "name": "orders-demo-exports",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awss3bucket.orders_demo_assets",
+        "type": "AwsS3Bucket",
+        "name": "orders-demo-assets",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-assets",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awss3bucket.orders_demo_legacy_payments",
+        "type": "AwsS3Bucket",
+        "name": "orders-demo-legacy-payments",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-legacy-payments",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      },
+      {
+        "address": "awsiamrole.orders_demo_legacy_admin_role",
+        "type": "AwsIamRole",
+        "name": "orders-demo-legacy-admin-role",
+        "values": {
+          "id": "arn:aws:demo:ap-south-1:111111111111:AwsIamRole/orders-demo-legacy-admin-role",
+          "tags": {
+            "environment": "dev"
+          }
+        }
+      }
+    ]
+  }
+}

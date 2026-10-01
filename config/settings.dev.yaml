@@ -1,0 +1,82 @@
+environment: dev
+aws:
+  region: ap-south-1
+  accounts:
+    - id: "${AWS_ACCOUNT_ID}"
+      name: primary
+      reader_role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/cloudops-lite-reader"
+      executor_role_arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/cloudops-lite-executor"
+storage:
+  bucket: "${ARTIFACT_BUCKET}"
+  state_table: cloudops-lite-state
+  checkpoint_table: cloudops-lite-checkpoints
+  parameter_prefix: /cloudops-lite/dev
+orchestration:
+  max_groups_per_batch: 12
+llm:
+  provider: anthropic
+  triage_model: claude-haiku-4-5-20251001
+  reasoning_model: claude-sonnet-5
+  max_cost_usd_per_run: 2.0
+  max_cost_usd_per_month: 15.0
+  requests_per_minute: 30
+  max_concurrency: 3
+  masking: true
+  response_cache: true
+  prices_per_mtok:
+    claude-haiku-4-5-20251001: { in: 1.0, out: 5.0 }
+    claude-sonnet-5: { in: 3.0, out: 15.0 }
+kb:
+  index_uri: "s3://${ARTIFACT_BUCKET}/kb/index/sop_index.json.gz"
+  query_embeddings: titan # titan | none
+  embedding_model_id: amazon.titan-embed-text-v2:0
+  embedding_dimensions: 1024
+  top_k: 5
+  min_score: 0.3
+checkpoint:
+  backend: dynamodb
+collectors:
+  security_hub: { enabled: true, min_severity: LOW } # set false at trial switchover
+  prowler: { enabled: true, prefix: prowler/latest/, max_age_days: 8 }
+  access_analyzer: { enabled: true }
+  cost_anomaly: { enabled: true, lookback_days: 14 }
+  cost_explorer: { enabled: true, max_calls: 2 }
+  cost_waste:
+    enabled: true
+    idle_cpu_threshold_pct: 5
+    lookback_days: 7
+    min_datapoint_hours: 1
+    required_tags: [owner, cost-center, environment, application]
+  drift:
+    enabled: true
+    prefix: drift/latest/
+    max_age_days: 8
+    workspaces:
+      - name: orders-demo
+        path: demo/infra
+        state_key: demo/dev/terraform.tfstate
+    unmanaged_selector: { tag: { app: orders-demo } }
+  cloudtrail: { lookback_days: 8 }
+refresh:
+  prowler_workflow: prowler.yml
+  drift_workflow: drift.yml
+  max_wait_minutes: 30
+remediation:
+  terraform_pr: { enabled: true, allowed_paths: ["demo/infra/**"] }
+  terraform_revert_dispatch: { enabled: true, workflow_file: demo-apply.yml }
+  runbook_executor: { enabled: true, dry_run: true } # still zero real AWS calls -- dry_run stays true until a human flips it deliberately
+approvals:
+  slack_channel_id: "${SLACK_CHANNEL_ID}"
+  approvers: ["${APPROVER_SLACK_ID}"] # T2 needs two DISTINCT approvers: add a second Slack ID or T2 actions stay pending
+  expiry_days: 7
+github:
+  auth_mode: pat
+  owner: "${GH_OWNER}"
+  repo: "${REPO_NAME}"
+report:
+  presign_days: 7
+  timezone: Asia/Kolkata
+langsmith:
+  project: cloudops-lite-dev
+  endpoint: "https://api.smith.langchain.com"
+  anonymize: true

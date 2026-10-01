@@ -1,0 +1,453 @@
+[
+  {
+    "Id": "orders-demo-vpc/EC2.6",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "EC2.6",
+    "Description": "No VPC Flow Logs configured",
+    "Resources": [
+      {
+        "Type": "AwsEc2Vpc",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Vpc/orders-demo-vpc",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.6"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-vpc-default-sg/EC2.2",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "EC2.2",
+    "Description": "Default VPC security group left at AWS default (unmanaged by Terraform)",
+    "Resources": [
+      {
+        "Type": "AwsEc2SecurityGroup",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-vpc-default-sg",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.2"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-web-admin-sg/EC2.13",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "HIGH"
+    },
+    "Title": "EC2.13",
+    "Description": "Ingress tcp/22 from 0.0.0.0/0",
+    "Resources": [
+      {
+        "Type": "AwsEc2SecurityGroup",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-web-admin-sg",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.13"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-web/EC2.9",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "EC2.9",
+    "Description": "Public IPv4 outside the approved public tier",
+    "Resources": [
+      {
+        "Type": "AwsEc2Instance",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.9"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-web/EC2.8",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "HIGH"
+    },
+    "Title": "EC2.8",
+    "Description": "http_tokens=optional (IMDSv1 permitted)",
+    "Resources": [
+      {
+        "Type": "AwsEc2Instance",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.8"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-web/SSM.1",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "SSM.1",
+    "Description": "No instance profile; not SSM-managed",
+    "Resources": [
+      {
+        "Type": "AwsEc2Instance",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "SSM.1"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-web/EC2.3",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "EC2.3",
+    "Description": "Unencrypted root volume",
+    "Resources": [
+      {
+        "Type": "AwsEc2Instance",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.3"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-batch-worker/SSM.1",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "SSM.1",
+    "Description": "No instance profile",
+    "Resources": [
+      {
+        "Type": "AwsEc2Instance",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-batch-worker",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "SSM.1"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-scratch/EC2.3",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "EC2.3",
+    "Description": "Unencrypted 1 GiB gp2 volume",
+    "Resources": [
+      {
+        "Type": "AwsEc2Volume",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Volume/orders-demo-scratch",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.3"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-exports/S3.8",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "HIGH"
+    },
+    "Title": "S3.8",
+    "Description": "BPA off + public-read policy on public/* prefix (enable_public_bucket_violation=true)",
+    "Resources": [
+      {
+        "Type": "AwsS3Bucket",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "S3.8"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-exports/S3.5",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "S3.5",
+    "Description": "No TLS-only bucket policy",
+    "Resources": [
+      {
+        "Type": "AwsS3Bucket",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "S3.5"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-exports/S3.9",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "LOW"
+    },
+    "Title": "S3.9",
+    "Description": "No server access logging",
+    "Resources": [
+      {
+        "Type": "AwsS3Bucket",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "S3.9"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-legacy-payments/S3.5",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "MEDIUM"
+    },
+    "Title": "S3.5",
+    "Description": "No TLS-only policy, but tagged cloudops:protected=true -> forced T3/manual regardless of clause's own catalog tier",
+    "Resources": [
+      {
+        "Type": "AwsS3Bucket",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-legacy-payments",
+        "Tags": {
+          "environment": "dev",
+          "cloudops:protected": "true"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "S3.5"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-legacy-admin-role/IAM.1",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "HIGH"
+    },
+    "Title": "IAM.1",
+    "Description": "orders-demo-wildcard-policy grants Action:* Resource:* \u2014 automation boundary (SHARED-002-2.5) forces T3 even though iac_managed=true",
+    "Resources": [
+      {
+        "Type": "AwsIamRole",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsIamRole/orders-demo-legacy-admin-role",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "IAM.1"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  },
+  {
+    "Id": "orders-demo-temp-debug-sg/EC2.19",
+    "ProductArn": "arn:aws:securityhub:ap-south-1::product/aws/securityhub",
+    "AwsAccountId": "111111111111",
+    "Types": [
+      "Software and Configuration Checks/AWS Security Best Practices"
+    ],
+    "CreatedAt": "2026-01-20T03:00:00+00:00",
+    "UpdatedAt": "2026-01-20T03:00:00+00:00",
+    "Severity": {
+      "Label": "CRITICAL"
+    },
+    "Title": "EC2.19",
+    "Description": "simulate_clickops.sh step 4: tcp/5432 open from 0.0.0.0/0 on the unmanaged SG \u2014 exercises the SSM executor path in dry-run since iac_managed=false",
+    "Resources": [
+      {
+        "Type": "AwsEc2SecurityGroup",
+        "Id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-temp-debug-sg",
+        "Tags": {
+          "environment": "dev"
+        }
+      }
+    ],
+    "Compliance": {
+      "Status": "FAILED",
+      "SecurityControlId": "EC2.18"
+    },
+    "RecordState": "ACTIVE",
+    "WorkflowState": "NEW"
+  }
+]

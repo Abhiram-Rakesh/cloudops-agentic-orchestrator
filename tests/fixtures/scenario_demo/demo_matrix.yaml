@@ -1,0 +1,454 @@
+# Single source of truth for the demo stack's intentional SOP violations.
+#
+# Every row says: given this resource/finding, which clause(s) should the
+# agent cite, what action_type + parameters should it recommend, and what
+# risk tier should the policy engine land on. `scripts/gen_demo_artifacts.py`
+# generates fixture JSON (tests/fixtures/scenario_demo/{prowler,securityhub,
+# drift}/*.json) and demo/docs/VIOLATIONS.md from this file — nowhere else.
+# A test asserts every `expected_clause_ids` entry here exists in
+# `knowledge_base/`.
+#
+# `post_clickops` rows only apply after `make drift` (simulate_clickops.sh)
+# has run; they are absent from the initial `demo-up` state.
+#
+# Tags common to every compliant demo resource (see demo/README.md):
+# owner=orders-team, cost-center=CC-2040, environment=dev, application=orders,
+# app=orders-demo, managed-by=terraform. Each violation below is a
+# *deviation* from this compliant baseline.
+
+cases:
+  # --- orders-demo-vpc ---
+  - resource_name: orders-demo-vpc
+    resource_type: AwsEc2Vpc
+    domain: security
+    source: security_hub
+    rule_id: EC2.6
+    control_ids: [EC2.6]
+    expected_clause_ids: [SEC-002-2.3]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "No VPC Flow Logs configured"
+
+  - resource_name: orders-demo-vpc-default-sg
+    resource_type: AwsEc2SecurityGroup
+    domain: security
+    source: security_hub
+    rule_id: EC2.2
+    control_ids: [EC2.2]
+    expected_clause_ids: [SEC-002-2.2]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: false
+    environment: dev
+    notes: "Default VPC security group left at AWS default (unmanaged by Terraform)"
+
+  # --- orders-demo-web-admin-sg ---
+  - resource_name: orders-demo-web-admin-sg
+    resource_type: AwsEc2SecurityGroup
+    domain: security
+    source: security_hub
+    rule_id: EC2.13
+    control_ids: [EC2.13, EC2.14, CIS-5.2, CIS-5.3]
+    expected_clause_ids: [SEC-002-2.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-RevokeSGIngressWorld
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    internet_exposed: true
+    notes: "Ingress tcp/22 from 0.0.0.0/0"
+
+  # --- orders-demo-app-sg (compliant at demo-up; drift target) ---
+  - resource_name: orders-demo-app-sg
+    domain: drift
+    source: drift
+    id: post_clickops
+    resource_type: AwsEc2SecurityGroup
+    rule_id: DRIFT-ATTR
+    control_ids: [DRIFT-ATTR]
+    expected_clause_ids: [DRIFT-003-3.1]
+    expected_action_type: terraform_revert_dispatch
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    internet_exposed: true
+    notes: "simulate_clickops.sh step 1: authorizes tcp/8080 from 0.0.0.0/0 — security-weakening, unticketed -> revert"
+
+  # --- orders-demo-web ---
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: security
+    source: security_hub
+    rule_id: EC2.9
+    control_ids: [EC2.9]
+    expected_clause_ids: [SEC-002-2.4]
+    expected_action_type: manual_ticket
+    expected_tier: T2
+    iac_managed: true
+    environment: dev
+    internet_exposed: true
+    notes: "Public IPv4 outside the approved public tier"
+
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: security
+    source: security_hub
+    rule_id: EC2.8
+    control_ids: [EC2.8]
+    expected_clause_ids: [SEC-005-5.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-EnforceIMDSv2
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    internet_exposed: true
+    notes: "http_tokens=optional (IMDSv1 permitted)"
+
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: security
+    source: security_hub
+    rule_id: SSM.1
+    control_ids: [SSM.1]
+    expected_clause_ids: [SEC-005-5.2]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "No instance profile; not SSM-managed"
+
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: security
+    source: security_hub
+    rule_id: EC2.3
+    control_ids: [EC2.3, EC2.7]
+    expected_clause_ids: [SEC-003-3.3]
+    expected_action_type: manual_ticket
+    expected_tier: T2
+    iac_managed: true
+    environment: dev
+    notes: "Unencrypted root volume"
+
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: cost
+    source: cost_waste
+    rule_id: COST-TAG-MISSING
+    control_ids: [COST-TAG-MISSING]
+    expected_clause_ids: [COST-001-1.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Missing cost-center tag"
+
+  - resource_name: orders-demo-web
+    resource_type: AwsEc2Instance
+    domain: cost
+    source: cost_waste
+    rule_id: COST-NONPROD-SCHEDULE
+    control_ids: [COST-NONPROD-SCHEDULE]
+    expected_clause_ids: [COST-005-5.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Missing schedule tag"
+
+  - resource_name: orders-demo-web
+    domain: drift
+    source: drift
+    id: post_clickops
+    resource_type: AwsEc2Instance
+    rule_id: DRIFT-ATTR
+    control_ids: [DRIFT-ATTR]
+    expected_clause_ids: [DRIFT-002-2.2, DRIFT-003-3.1]
+    expected_action_type: terraform_pr
+    expected_action_intent: codify_drift
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "simulate_clickops.sh step 2: tags cost-center=CC-1042, change-ticket=CHG-2211 — ticketed & benign -> codify"
+
+  # --- orders-demo-batch-worker (only when enable_idle_instance=true) ---
+  - resource_name: orders-demo-batch-worker
+    resource_type: AwsEc2Instance
+    domain: cost
+    source: cost_waste
+    rule_id: COST-WASTE-IDLE-EC2
+    control_ids: [COST-WASTE-IDLE-EC2]
+    expected_clause_ids: [COST-002-2.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-StopInstance
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    requires_flag: enable_idle_instance
+    notes: "Idle non-prod instance (CPU < 5%, net < 5MB/day); only present when enable_idle_instance=true"
+
+  - resource_name: orders-demo-batch-worker
+    resource_type: AwsEc2Instance
+    domain: cost
+    source: cost_waste
+    rule_id: COST-TAG-MISSING
+    control_ids: [COST-TAG-MISSING]
+    expected_clause_ids: [COST-001-1.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    requires_flag: enable_idle_instance
+    notes: "Missing owner and cost-center tags"
+
+  - resource_name: orders-demo-batch-worker
+    resource_type: AwsEc2Instance
+    domain: security
+    source: security_hub
+    rule_id: SSM.1
+    control_ids: [SSM.1]
+    expected_clause_ids: [SEC-005-5.2]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    requires_flag: enable_idle_instance
+    notes: "No instance profile"
+
+  # --- orders-demo-scratch (EBS volume) ---
+  - resource_name: orders-demo-scratch
+    resource_type: AwsEc2Volume
+    domain: security
+    source: security_hub
+    rule_id: EC2.3
+    control_ids: [EC2.3, EC2.7]
+    expected_clause_ids: [SEC-003-3.3]
+    expected_action_type: manual_ticket
+    expected_tier: T2
+    iac_managed: true
+    environment: dev
+    notes: "Unencrypted 1 GiB gp2 volume"
+
+  - resource_name: orders-demo-scratch
+    resource_type: AwsEc2Volume
+    domain: cost
+    source: cost_waste
+    rule_id: COST-WASTE-UNATTACHED-EBS
+    control_ids: [COST-WASTE-UNATTACHED-EBS]
+    expected_clause_ids: [COST-002-2.2]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-SnapshotAndDeleteVolume
+    expected_tier: T2
+    iac_managed: true
+    environment: dev
+    notes: "Unattached for more than 7 days"
+
+  - resource_name: orders-demo-scratch
+    resource_type: AwsEc2Volume
+    domain: cost
+    source: cost_waste
+    rule_id: COST-WASTE-GP2
+    control_ids: [COST-WASTE-GP2]
+    expected_clause_ids: [COST-003-3.1]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "gp2 volume type"
+
+  - resource_name: orders-demo-scratch
+    resource_type: AwsEc2Volume
+    domain: cost
+    source: cost_waste
+    rule_id: COST-TAG-MISSING
+    control_ids: [COST-TAG-MISSING]
+    expected_clause_ids: [COST-001-1.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Missing required tags"
+
+  # --- orders-demo-eip-unused ---
+  - resource_name: orders-demo-eip-unused
+    resource_type: AwsEc2Eip
+    domain: cost
+    source: cost_waste
+    rule_id: COST-WASTE-UNASSOCIATED-EIP
+    control_ids: [COST-WASTE-UNASSOCIATED-EIP, EC2.12]
+    expected_clause_ids: [COST-002-2.3]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ReleaseEIP
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Unassociated Elastic IP"
+
+  - resource_name: orders-demo-eip-unused
+    resource_type: AwsEc2Eip
+    domain: cost
+    source: cost_waste
+    rule_id: COST-TAG-MISSING
+    control_ids: [COST-TAG-MISSING]
+    expected_clause_ids: [COST-001-1.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Missing required tags"
+
+  # --- orders-demo-exports-<suffix> ---
+  - resource_name: orders-demo-exports
+    resource_type: AwsS3Bucket
+    domain: security
+    source: security_hub
+    rule_id: S3.8
+    control_ids: [S3.8]
+    expected_clause_ids: [SEC-003-3.2]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-EnableS3BlockPublicAccess
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    internet_exposed: true
+    data_classification: internal
+    notes: "BPA off + public-read policy on public/* prefix (enable_public_bucket_violation=true)"
+
+  - resource_name: orders-demo-exports
+    resource_type: AwsS3Bucket
+    domain: security
+    source: security_hub
+    rule_id: S3.5
+    control_ids: [S3.5]
+    expected_clause_ids: [SEC-003-3.4]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    data_classification: internal
+    notes: "No TLS-only bucket policy"
+
+  - resource_name: orders-demo-exports
+    resource_type: AwsS3Bucket
+    domain: security
+    source: security_hub
+    rule_id: S3.9
+    control_ids: [S3.9]
+    expected_clause_ids: [SEC-004-4.3]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    data_classification: internal
+    notes: "No server access logging"
+
+  - resource_name: orders-demo-exports
+    resource_type: AwsS3Bucket
+    domain: cost
+    source: cost_waste
+    rule_id: COST-TAG-MISSING
+    control_ids: [COST-TAG-MISSING]
+    expected_clause_ids: [COST-001-1.1]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-ApplyTags
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "Missing cost-center tag"
+
+  - resource_name: orders-demo-exports
+    resource_type: AwsS3Bucket
+    domain: cost
+    source: cost_waste
+    rule_id: null
+    control_ids: []
+    expected_clause_ids: [COST-003-3.3]
+    expected_action_type: manual_ticket
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    notes: "No lifecycle policy"
+
+  # --- orders-demo-assets-<suffix> (compliant at demo-up; drift target) ---
+  - resource_name: orders-demo-assets
+    domain: drift
+    source: drift
+    id: post_clickops
+    resource_type: AwsS3Bucket
+    rule_id: DRIFT-ATTR
+    control_ids: [DRIFT-ATTR]
+    expected_clause_ids: [DRIFT-003-3.1, SEC-003-3.5]
+    expected_action_type: terraform_revert_dispatch
+    expected_tier: T1
+    iac_managed: true
+    environment: dev
+    data_classification: internal
+    notes: "simulate_clickops.sh step 3: suspends versioning — security-weakening -> revert"
+
+  # --- orders-demo-legacy-payments-<suffix> (protected) ---
+  - resource_name: orders-demo-legacy-payments
+    resource_type: AwsS3Bucket
+    domain: security
+    source: security_hub
+    rule_id: S3.5
+    control_ids: [S3.5]
+    expected_clause_ids: [SEC-003-3.4, SHARED-004-4.1]
+    expected_action_type: manual_ticket
+    expected_tier: T3
+    iac_managed: true
+    environment: dev
+    data_classification: confidential
+    protected: true
+    notes: "No TLS-only policy, but tagged cloudops:protected=true -> forced T3/manual regardless of clause's own catalog tier"
+
+  # --- IAM (wildcard policy / legacy admin role) ---
+  - resource_name: orders-demo-legacy-admin-role
+    resource_type: AwsIamRole
+    domain: security
+    source: security_hub
+    rule_id: IAM.1
+    control_ids: [IAM.1]
+    expected_clause_ids: [SEC-001-1.1]
+    expected_action_type: manual_ticket
+    expected_tier: T3
+    iac_managed: true
+    environment: dev
+    notes: "orders-demo-wildcard-policy grants Action:* Resource:* — automation boundary (SHARED-002-2.5) forces T3 even though iac_managed=true"
+
+  # --- orders-demo-temp-debug-sg (created by simulate_clickops.sh, unmanaged) ---
+  - resource_name: orders-demo-temp-debug-sg
+    domain: drift
+    source: drift
+    id: post_clickops
+    resource_type: AwsEc2SecurityGroup
+    rule_id: DRIFT-UNMANAGED
+    control_ids: [DRIFT-UNMANAGED]
+    expected_clause_ids: [DRIFT-001-1.2]
+    expected_action_type: manual_ticket
+    expected_tier: T2
+    iac_managed: false
+    environment: dev
+    notes: "simulate_clickops.sh step 4: creates an unmanaged SG (tag app=orders-demo, no managed-by)"
+
+  - resource_name: orders-demo-temp-debug-sg
+    domain: security
+    source: security_hub
+    id: post_clickops
+    resource_type: AwsEc2SecurityGroup
+    rule_id: EC2.19
+    control_ids: [EC2.18, EC2.19]
+    expected_clause_ids: [SEC-002-2.5]
+    expected_action_type: ssm_automation
+    expected_action_document: CloudOps-RevokeSGIngressWorld
+    expected_tier: T1
+    iac_managed: false
+    environment: dev
+    internet_exposed: true
+    notes: "simulate_clickops.sh step 4: tcp/5432 open from 0.0.0.0/0 on the unmanaged SG — exercises the SSM executor path in dry-run since iac_managed=false"

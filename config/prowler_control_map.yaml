@@ -1,0 +1,51 @@
+# Maps Prowler check_id -> Security Hub control IDs / CIS v3.0 refs.
+#
+# Generated from knowledge_base/**/*.md's clause-meta blocks (each clause's
+# `controls` + `prowler_checks` lists) so this file cannot silently drift
+# from the SOP catalog that is the actual source of truth — see
+# `scripts/gen_demo_artifacts.py` and `tests/unit/test_kb_control_coverage.py`,
+# which regenerate/verify this mapping against the knowledge base.
+#
+# NOT verified against a live `prowler --list-checks` run (Hard Rule #2/#5 —
+# no paid/live API calls while building this repo). Check IDs follow
+# Prowler's real public naming convention but must be re-confirmed before
+# the first `prowler.yml` run — see README.md (Troubleshooting).
+#
+# `access_analyzer` (SEC-001-1.5) and `ec2_instance_managed_by_ssm`
+# (SEC-005-5.3) have no Security Hub control equivalent in this catalog —
+# they map to `[]` deliberately, not omitted, so a lookup miss is
+# distinguishable from a mapping gap.
+checks:
+  accessanalyzer_enabled: []
+  cloudtrail_log_file_validation_enabled: [CloudTrail.1, CloudTrail.4]
+  cloudtrail_multi_region_enabled: [CloudTrail.1, CloudTrail.4]
+  config_recorder_all_regions_enabled: [Config.1]
+  ec2_ebs_default_encryption: [EC2.3, EC2.7]
+  ec2_ebs_volume_encryption: [EC2.3, EC2.7]
+  ec2_elastic_ip_unassigned: [EC2.12]
+  ec2_instance_imdsv2_enabled: [EC2.8]
+  ec2_instance_managed_by_ssm: []
+  ec2_instance_public_ip: [EC2.9]
+  ec2_securitygroup_allow_ingress_from_internet_to_high_risk_tcp_ports: [EC2.18, EC2.19]
+  ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_22: [CIS-5.2, CIS-5.3, EC2.13, EC2.14]
+  ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_3389: [CIS-5.2, CIS-5.3, EC2.13, EC2.14]
+  ec2_securitygroup_default_restrict_traffic: [EC2.2]
+  guardduty_is_enabled: [GuardDuty.1]
+  iam_avoid_root_usage: [IAM.6, IAM.9]
+  iam_customer_attached_policy_admin_privileges: [IAM.1]
+  iam_policy_allows_privilege_escalation: [IAM.1]
+  iam_root_hardware_mfa_enabled: [IAM.6, IAM.9]
+  iam_root_mfa_enabled: [IAM.6, IAM.9]
+  iam_rotate_access_key_90_days: [IAM.3]
+  iam_user_mfa_enabled_console_access: [IAM.5]
+  s3_account_level_public_access_blocks: [S3.1]
+  s3_bucket_level_public_access_block: [S3.8]
+  s3_bucket_lifecycle_enabled: []
+  s3_bucket_object_versioning: [S3.14]
+  s3_bucket_public_access: [S3.8]
+  s3_bucket_public_read_acl: [S3.8]
+  s3_bucket_public_write_acl: [S3.8]
+  s3_bucket_secure_transport_policy: [S3.5]
+  s3_bucket_server_access_logging_enabled: [S3.9]
+  ssm_managed_compliant_patching: [SSM.1]
+  vpc_flow_logs_enabled: [EC2.6]

@@ -1,0 +1,98 @@
+# CloudOps-RevokeSGIngressWorld (§9.3) — SEC-002-class remediation.
+# Revokes 0.0.0.0/0 and ::/0 ingress rules for the given ports on a
+# security group. Default tier T1 per config/policy/action_allowlist.yaml.
+#
+# VERIFY BEFORE DEPLOY: see CloudOps-EnableS3BlockPublicAccess.yaml's note.
+schemaVersion: "0.3"
+description: "Revoke 0.0.0.0/0 and ::/0 ingress rules for the given ports on a security group, unless tagged cloudops:protected=true."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "ARN of the role Automation assumes to perform these actions."
+  SecurityGroupId:
+    type: String
+    description: "The security group to remediate."
+  Ports:
+    type: StringList
+    description: "The TCP ports whose world-open rules should be revoked."
+  Protocol:
+    type: String
+    default: "tcp"
+    description: "The IP protocol of the offending rules."
+mainSteps:
+  - name: CheckProtectedTag
+    action: aws:executeScript
+    isCritical: true
+    inputs:
+      Runtime: python3.11
+      Handler: check_protected
+      InputPayload:
+        ResourceId: "{{ SecurityGroupId }}"
+      Script: |-
+        import boto3
+
+        def check_protected(events, context):
+            client = boto3.client("ec2")
+            response = client.describe_tags(
+                Filters=[{"Name": "resource-id", "Values": [events["ResourceId"]]}]
+            )
+            protected = any(
+                t["Key"] == "cloudops:protected" and t["Value"] == "true"
+                for t in response.get("Tags", [])
+            )
+            return {"protected": "true" if protected else "false"}
+    outputs:
+      - Name: Protected
+        Selector: $.Payload.protected
+        Type: String
+  - name: AbortIfProtected
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AbortedProtectedResource
+          Variable: "{{ CheckProtectedTag.Protected }}"
+          StringEquals: "true"
+      Default: RevokeWorldOpenIngress
+  - name: RevokeWorldOpenIngress
+    action: aws:executeScript
+    isEnd: true
+    inputs:
+      Runtime: python3.11
+      Handler: revoke_world_open
+      InputPayload:
+        SecurityGroupId: "{{ SecurityGroupId }}"
+        Ports: "{{ Ports }}"
+        Protocol: "{{ Protocol }}"
+      Script: |-
+        import boto3
+
+        def revoke_world_open(events, context):
+            client = boto3.client("ec2")
+            sg_id = events["SecurityGroupId"]
+            protocol = events["Protocol"]
+            ports = [int(p) for p in events["Ports"]]
+            sg = client.describe_security_groups(GroupIds=[sg_id])["SecurityGroups"][0]
+            revoked = []
+            for permission in sg.get("IpPermissions", []):
+                if permission.get("IpProtocol") != protocol:
+                    continue
+                if permission.get("FromPort") not in ports:
+                    continue
+                world_ipv4 = [r for r in permission.get("IpRanges", []) if r.get("CidrIp") == "0.0.0.0/0"]
+                world_ipv6 = [
+                    r for r in permission.get("Ipv6Ranges", []) if r.get("CidrIpv6") == "::/0"
+                ]
+                if not world_ipv4 and not world_ipv6:
+                    continue
+                narrowed = dict(permission)
+                narrowed["IpRanges"] = world_ipv4
+                narrowed["Ipv6Ranges"] = world_ipv6
+                client.revoke_security_group_ingress(GroupId=sg_id, IpPermissions=[narrowed])
+                revoked.append(permission.get("FromPort"))
+            return {"revoked_ports": revoked}
+  - name: AbortedProtectedResource
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S

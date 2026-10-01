@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# uv
+uv.lock.bak
+
+# Build artifacts
+build/
+.build/
+dist/
+.cache/
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+infra/**/terraform.tfvars
+demo/**/terraform.tfvars
+!**/terraform.tfvars.example
+infra/**/backend.hcl
+!**/backend.hcl.example
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local scratch
+.local/
+*.log
+.claude/
+demo/scripts/.temp_debug_sg_id
+
+# Local agent instructions (kept locally, not tracked)
+CLAUDE.md

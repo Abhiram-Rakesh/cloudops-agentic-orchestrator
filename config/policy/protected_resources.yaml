@@ -1,0 +1,20 @@
+# Protected-resource rules (SHARED-004). A resource matching ANY of these
+# forces effective_risk_tier=T3 / action_type=manual_ticket, overriding
+# whatever the agent proposed and whatever risk_tiers.yaml would otherwise
+# compute — see policy/engine.py rule 4.
+tags:
+  # SHARED-004-4.1: explicit owner opt-out, resource-level.
+  - key: "cloudops:protected"
+    value: "true"
+  # SHARED-004-4.2: the orchestrator's own platform resources are always
+  # out of scope for its own automated remediation.
+  - key: "app"
+    value: "cloudops-agentic-orchestrator"
+
+# Explicit ARNs/ids protected regardless of tags (e.g. a resource whose tags
+# can't be trusted, or a legacy system pending decommission — see
+# demo/infra's orders-demo-legacy-payments-* bucket, protected via tag
+# rather than listed here, since the demo intentionally exercises the
+# tag-based path; this list is for cases where tagging itself isn't
+# reliable).
+resource_ids: []

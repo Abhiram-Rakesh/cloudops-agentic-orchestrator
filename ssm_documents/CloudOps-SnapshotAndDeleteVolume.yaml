@@ -1,0 +1,117 @@
+# CloudOps-SnapshotAndDeleteVolume (§9.3) — COST-class remediation.
+# Snapshots an EBS volume, verifies the snapshot completed, then deletes
+# the (unattached) volume. Default tier T2 per
+# config/policy/action_allowlist.yaml — this is the one destructive
+# document in the catalog, hence the higher tier and the extra
+# verification step before delete.
+#
+# VERIFY BEFORE DEPLOY: see CloudOps-EnableS3BlockPublicAccess.yaml's note.
+schemaVersion: "0.3"
+description: "Snapshot an EBS volume, verify the snapshot, then delete the unattached volume, unless tagged cloudops:protected=true."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "ARN of the role Automation assumes to perform these actions."
+  VolumeId:
+    type: String
+    description: "The unattached EBS volume to snapshot and delete."
+mainSteps:
+  - name: CheckProtectedTag
+    action: aws:executeScript
+    isCritical: true
+    inputs:
+      Runtime: python3.11
+      Handler: check_protected
+      InputPayload:
+        ResourceId: "{{ VolumeId }}"
+      Script: |-
+        import boto3
+
+        def check_protected(events, context):
+            client = boto3.client("ec2")
+            response = client.describe_tags(
+                Filters=[{"Name": "resource-id", "Values": [events["ResourceId"]]}]
+            )
+            protected = any(
+                t["Key"] == "cloudops:protected" and t["Value"] == "true"
+                for t in response.get("Tags", [])
+            )
+            return {"protected": "true" if protected else "false"}
+    outputs:
+      - Name: Protected
+        Selector: $.Payload.protected
+        Type: String
+  - name: AbortIfProtected
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AbortedProtectedResource
+          Variable: "{{ CheckProtectedTag.Protected }}"
+          StringEquals: "true"
+      Default: VerifyUnattached
+  - name: VerifyUnattached
+    action: aws:executeScript
+    inputs:
+      Runtime: python3.11
+      Handler: verify_unattached
+      InputPayload:
+        VolumeId: "{{ VolumeId }}"
+      Script: |-
+        import boto3
+
+        def verify_unattached(events, context):
+            client = boto3.client("ec2")
+            volume = client.describe_volumes(VolumeIds=[events["VolumeId"]])["Volumes"][0]
+            attached = bool(volume.get("Attachments"))
+            return {"attached": "true" if attached else "false"}
+    outputs:
+      - Name: Attached
+        Selector: $.Payload.attached
+        Type: String
+  - name: AbortIfAttached
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CreateSnapshot
+          Variable: "{{ VerifyUnattached.Attached }}"
+          StringEquals: "false"
+      Default: AbortedNowAttached
+  - name: CreateSnapshot
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: CreateSnapshot
+      VolumeId: "{{ VolumeId }}"
+      Description: "cloudops pre-delete snapshot of {{ VolumeId }}"
+    outputs:
+      - Name: SnapshotId
+        Selector: $.SnapshotId
+        Type: String
+  - name: WaitForSnapshotCompleted
+    action: aws:waitForAwsResourceProperty
+    inputs:
+      Service: ec2
+      Api: DescribeSnapshots
+      SnapshotIds:
+        - "{{ CreateSnapshot.SnapshotId }}"
+      PropertySelector: "$.Snapshots[0].State"
+      DesiredValues:
+        - completed
+  - name: DeleteVolume
+    action: aws:executeAwsApi
+    isEnd: true
+    inputs:
+      Service: ec2
+      Api: DeleteVolume
+      VolumeId: "{{ VolumeId }}"
+  - name: AbortedProtectedResource
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S
+  - name: AbortedNowAttached
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S

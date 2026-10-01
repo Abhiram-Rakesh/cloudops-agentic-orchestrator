@@ -1,0 +1,90 @@
+# CloudOps-ApplyTags (§9.3) — COST/DRIFT-class remediation.
+# Adds missing required tags to an EC2-taggable resource (instance,
+# security group, volume, EIP allocation, snapshot, …), never overwriting
+# an existing tag. Default tier T1 per config/policy/action_allowlist.yaml.
+#
+# VERIFY BEFORE DEPLOY: see CloudOps-EnableS3BlockPublicAccess.yaml's note.
+# Assumes an EC2 resource (ec2:CreateTags works uniformly across instance/
+# sg/volume/eip/snapshot ids) — a non-EC2 resource_id needs a different
+# document, not this one.
+schemaVersion: "0.3"
+description: "Add missing required tags to an EC2-taggable resource, never overwriting an existing tag, unless tagged cloudops:protected=true."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "ARN of the role Automation assumes to perform these actions."
+  ResourceId:
+    type: String
+    description: "The EC2-taggable resource to tag."
+  Tags:
+    type: StringMap
+    description: "The required tags to add if missing."
+mainSteps:
+  - name: CheckProtectedTag
+    action: aws:executeScript
+    isCritical: true
+    inputs:
+      Runtime: python3.11
+      Handler: check_protected
+      InputPayload:
+        ResourceId: "{{ ResourceId }}"
+      Script: |-
+        import boto3
+
+        def check_protected(events, context):
+            client = boto3.client("ec2")
+            response = client.describe_tags(
+                Filters=[{"Name": "resource-id", "Values": [events["ResourceId"]]}]
+            )
+            protected = any(
+                t["Key"] == "cloudops:protected" and t["Value"] == "true"
+                for t in response.get("Tags", [])
+            )
+            return {"protected": "true" if protected else "false"}
+    outputs:
+      - Name: Protected
+        Selector: $.Payload.protected
+        Type: String
+  - name: AbortIfProtected
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AbortedProtectedResource
+          Variable: "{{ CheckProtectedTag.Protected }}"
+          StringEquals: "true"
+      Default: ApplyMissingTags
+  - name: ApplyMissingTags
+    action: aws:executeScript
+    isEnd: true
+    inputs:
+      Runtime: python3.11
+      Handler: apply_missing_tags
+      InputPayload:
+        ResourceId: "{{ ResourceId }}"
+        Tags: "{{ Tags }}"
+      Script: |-
+        import boto3
+
+        def apply_missing_tags(events, context):
+            client = boto3.client("ec2")
+            resource_id = events["ResourceId"]
+            desired = events["Tags"]
+            existing = {
+                t["Key"]
+                for t in client.describe_tags(
+                    Filters=[{"Name": "resource-id", "Values": [resource_id]}]
+                ).get("Tags", [])
+            }
+            missing = {k: v for k, v in desired.items() if k not in existing}
+            if missing:
+                client.create_tags(
+                    Resources=[resource_id],
+                    Tags=[{"Key": k, "Value": v} for k, v in missing.items()],
+                )
+            return {"applied": sorted(missing.keys())}
+  - name: AbortedProtectedResource
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S

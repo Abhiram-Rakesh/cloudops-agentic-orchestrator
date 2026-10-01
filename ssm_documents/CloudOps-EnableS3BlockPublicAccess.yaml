@@ -1,0 +1,67 @@
+# CloudOps-EnableS3BlockPublicAccess (§9.3) — SEC-002-class remediation.
+# Enables all four S3 Block Public Access settings on a bucket. Default
+# tier T1 (non-prod) / T2 (prod) per config/policy/action_allowlist.yaml.
+#
+# VERIFY BEFORE DEPLOY (README.md (Troubleshooting)): the aws:executeScript
+# Runtime below and the exact GetBucketTagging/error-handling shape should
+# be re-checked against the SSM Automation actions reference at deploy time
+# — this was authored without a live AWS account to test against.
+schemaVersion: "0.3"
+description: "Enable all four S3 Block Public Access settings on a bucket, unless tagged cloudops:protected=true."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "ARN of the role Automation assumes to perform these actions."
+  BucketName:
+    type: String
+    description: "The S3 bucket to protect."
+mainSteps:
+  - name: CheckProtectedTag
+    action: aws:executeScript
+    isCritical: true
+    inputs:
+      Runtime: python3.11
+      Handler: check_protected
+      InputPayload:
+        BucketName: "{{ BucketName }}"
+      Script: |-
+        import boto3
+
+        def check_protected(events, context):
+            client = boto3.client("s3")
+            try:
+                tags = client.get_bucket_tagging(Bucket=events["BucketName"]).get("TagSet", [])
+            except client.exceptions.ClientError:
+                tags = []
+            protected = any(t["Key"] == "cloudops:protected" and t["Value"] == "true" for t in tags)
+            return {"protected": "true" if protected else "false"}
+    outputs:
+      - Name: Protected
+        Selector: $.Payload.protected
+        Type: String
+  - name: AbortIfProtected
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AbortedProtectedResource
+          Variable: "{{ CheckProtectedTag.Protected }}"
+          StringEquals: "true"
+      Default: EnableBlockPublicAccess
+  - name: EnableBlockPublicAccess
+    action: aws:executeAwsApi
+    isEnd: true
+    inputs:
+      Service: s3
+      Api: PutPublicAccessBlock
+      Bucket: "{{ BucketName }}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+  - name: AbortedProtectedResource
+    action: aws:sleep
+    isEnd: true
+    inputs:
+      Duration: PT1S

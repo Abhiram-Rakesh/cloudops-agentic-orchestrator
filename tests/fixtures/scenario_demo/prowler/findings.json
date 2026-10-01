@@ -1,0 +1,213 @@
+[
+  {
+    "check_id": "vpc_flow_logs_enabled",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Vpc/orders-demo-vpc",
+    "resource_name": "orders-demo-vpc",
+    "resource_type": "AwsEc2Vpc",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_securitygroup_default_restrict_traffic",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-vpc-default-sg",
+    "resource_name": "orders-demo-vpc-default-sg",
+    "resource_type": "AwsEc2SecurityGroup",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_22",
+    "status": "FAIL",
+    "severity": "high",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-web-admin-sg",
+    "resource_name": "orders-demo-web-admin-sg",
+    "resource_type": "AwsEc2SecurityGroup",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_instance_public_ip",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+    "resource_name": "orders-demo-web",
+    "resource_type": "AwsEc2Instance",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_instance_imdsv2_enabled",
+    "status": "FAIL",
+    "severity": "high",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+    "resource_name": "orders-demo-web",
+    "resource_type": "AwsEc2Instance",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ssm_managed_compliant_patching",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+    "resource_name": "orders-demo-web",
+    "resource_type": "AwsEc2Instance",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_ebs_default_encryption",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-web",
+    "resource_name": "orders-demo-web",
+    "resource_type": "AwsEc2Instance",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ssm_managed_compliant_patching",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Instance/orders-demo-batch-worker",
+    "resource_name": "orders-demo-batch-worker",
+    "resource_type": "AwsEc2Instance",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_ebs_default_encryption",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2Volume/orders-demo-scratch",
+    "resource_name": "orders-demo-scratch",
+    "resource_type": "AwsEc2Volume",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "s3_bucket_level_public_access_block",
+    "status": "FAIL",
+    "severity": "high",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+    "resource_name": "orders-demo-exports",
+    "resource_type": "AwsS3Bucket",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "s3_bucket_secure_transport_policy",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+    "resource_name": "orders-demo-exports",
+    "resource_type": "AwsS3Bucket",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "s3_bucket_server_access_logging_enabled",
+    "status": "FAIL",
+    "severity": "low",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-exports",
+    "resource_name": "orders-demo-exports",
+    "resource_type": "AwsS3Bucket",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "s3_bucket_secure_transport_policy",
+    "status": "FAIL",
+    "severity": "medium",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsS3Bucket/orders-demo-legacy-payments",
+    "resource_name": "orders-demo-legacy-payments",
+    "resource_type": "AwsS3Bucket",
+    "tags": {
+      "environment": "dev",
+      "cloudops:protected": "true"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "iam_customer_attached_policy_admin_privileges",
+    "status": "FAIL",
+    "severity": "high",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsIamRole/orders-demo-legacy-admin-role",
+    "resource_name": "orders-demo-legacy-admin-role",
+    "resource_type": "AwsIamRole",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  },
+  {
+    "check_id": "ec2_securitygroup_allow_ingress_from_internet_to_high_risk_tcp_ports",
+    "status": "FAIL",
+    "severity": "critical",
+    "region": "ap-south-1",
+    "account_id": "111111111111",
+    "resource_uid": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-temp-debug-sg",
+    "resource_name": "orders-demo-temp-debug-sg",
+    "resource_type": "AwsEc2SecurityGroup",
+    "tags": {
+      "environment": "dev"
+    },
+    "timestamp": "2026-01-20T03:00:00+00:00"
+  }
+]

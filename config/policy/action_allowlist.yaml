@@ -1,0 +1,117 @@
+# Every action_type + (for ssm_automation) document this system may ever
+# recommend, with a JSON-schema-lite parameter shape the policy engine
+# validates a Recommendation's `parameters` against (policy engine rule 1). A
+# recommendation citing a document or parameter shape not listed here is
+# rejected — downgraded to manual_ticket/NEEDS_HUMAN, never silently
+# dropped.
+#
+# Each ssm_automation entry's `identifying_parameter` names which required
+# parameter identifies WHICH resource to act on. The orchestrator supplies
+# this per-target itself, straight from the stored Finding's real
+# resource_id (policy/engine.py excludes it from what the model must supply,
+# remediation/runbook_executor.py fans out one automation execution per
+# target using it) -- never the LLM. A single Recommendation can cover
+# multiple targets (e.g. the same world-open-SSH violation on several
+# security groups), and there is no way for the model to express "one
+# different real value per target" in one flat parameters dict; asking it
+# to guess is what produces made-up values like "<UNKNOWN>" or a
+# placeholder description instead of a real resource id (found live
+# 2026-09-29, see README.md (Troubleshooting)).
+ssm_automation:
+  CloudOps-EnableS3BlockPublicAccess:
+    description: "Enable all four S3 Block Public Access settings on a bucket"
+    default_tier: { non_prod: T1, prod: T2 }
+    identifying_parameter: bucket_name
+    parameters:
+      required: [bucket_name]
+      properties:
+        bucket_name: { type: string }
+
+  CloudOps-RevokeSGIngressWorld:
+    description: "Revoke 0.0.0.0/0 and ::/0 ingress rules for the given ports on a security group"
+    default_tier: { non_prod: T1, prod: T1 }
+    identifying_parameter: security_group_id
+    parameters:
+      required: [security_group_id, ports]
+      properties:
+        security_group_id: { type: string }
+        ports: { type: array, items: { type: integer } }
+        protocol: { type: string, default: "tcp" }
+
+  CloudOps-EnforceIMDSv2:
+    description: "Set HttpTokens=required on an EC2 instance"
+    default_tier: { non_prod: T1, prod: T2 }
+    identifying_parameter: instance_id
+    parameters:
+      required: [instance_id]
+      properties:
+        instance_id: { type: string }
+
+  CloudOps-StopInstance:
+    description: "Stop a non-production EC2 instance"
+    default_tier: { non_prod: T1, prod: T1 }
+    identifying_parameter: instance_id
+    parameters:
+      required: [instance_id]
+      properties:
+        instance_id: { type: string }
+
+  CloudOps-ReleaseEIP:
+    description: "Release an unassociated Elastic IP"
+    default_tier: { non_prod: T1, prod: T1 }
+    identifying_parameter: allocation_id
+    parameters:
+      required: [allocation_id]
+      properties:
+        allocation_id: { type: string }
+
+  CloudOps-ApplyTags:
+    description: "Add missing required tags to a resource, never overwriting an existing tag"
+    default_tier: { non_prod: T1, prod: T1 }
+    identifying_parameter: resource_id
+    parameters:
+      required: [resource_id, tags]
+      properties:
+        resource_id: { type: string }
+        tags: { type: object }
+
+  CloudOps-SnapshotAndDeleteVolume:
+    description: "Snapshot an EBS volume, verify the snapshot, then delete the volume"
+    default_tier: { non_prod: T2, prod: T2 }
+    identifying_parameter: volume_id
+    parameters:
+      required: [volume_id]
+      properties:
+        volume_id: { type: string }
+
+terraform_pr:
+  description: "Open a draft PR against an allowed IaC path — never auto-merged"
+  parameters:
+    required: [repo, workspace, intent, resource_address]
+    properties:
+      repo: { type: string }
+      workspace: { type: string }
+      intent: { type: string, enum: [codify_drift, remediate_security, remediate_cost] }
+      resource_address: { type: string }
+
+terraform_revert_dispatch:
+  description: "workflow_dispatch the IaC apply pipeline to re-assert last-known-good state"
+  parameters:
+    required: [repo, workflow_file, ref, workspace]
+    properties:
+      repo: { type: string }
+      workflow_file: { type: string }
+      ref: { type: string }
+      workspace: { type: string }
+
+manual_ticket:
+  description: "No parameters — the report carries a drafted manual procedure; never creates an action thread"
+  parameters:
+    required: []
+    properties: {}
+
+notify_owner:
+  description: "No parameters — report-only notification; never creates an action thread"
+  parameters:
+    required: []
+    properties: {}

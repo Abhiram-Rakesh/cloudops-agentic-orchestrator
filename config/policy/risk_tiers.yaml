@@ -1,0 +1,40 @@
+# Risk tier definitions and tier-raising rules — see SHARED-002 and
+# policy/engine.py rule 6. An agent's `proposed_risk_tier` can only ever be
+# raised by these rules, never lowered: `effective_risk_tier =
+# max(proposed, tier implied by the first matching rule below)`.
+tiers:
+  T0:
+    approvals: 0
+    automatable: false
+    description: "Report / notify only"
+  T1:
+    approvals: 1
+    automatable: true
+    description: "Low-risk, reversible, non-prod"
+  T2:
+    approvals: 2
+    automatable: true
+    change_window: { days: [MON, TUE, WED, THU], start: "10:00", end: "17:00", tz: "Asia/Kolkata" }
+    description: "Prod or destructive-with-backup"
+  T3:
+    approvals: null
+    automatable: false
+    description: "Human-only (IAM, KMS, data deletion, protected)"
+
+# Evaluated in order; every matching rule's min_tier/tier contributes to the
+# max() in policy/engine.py — matching more than one rule is expected (e.g.
+# a prod SSM automation matches both the environment rule and, if it's IAM,
+# the resource-type-prefix rule; the highest tier wins).
+rules:
+  - match: { environment: [prod, production] }
+    min_tier: T2
+  - match: { resource_type_prefix: [AwsIam, AwsKms] }
+    min_tier: T3
+  - match: { document: [CloudOps-SnapshotAndDeleteVolume] }
+    min_tier: T2
+  - match: { action_type: [terraform_revert_dispatch] }
+    min_tier: T1
+  - match: { action_type: [notify_owner] }
+    tier: T0
+  - match: { action_type: [manual_ticket] }
+    automatable: false # tier kept for SLA/approval context, never executed

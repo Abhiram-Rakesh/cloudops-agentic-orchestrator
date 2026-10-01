@@ -1,0 +1,11 @@
+[
+  {
+    "resource_id": "arn:aws:demo:ap-south-1:111111111111:AwsEc2SecurityGroup/orders-demo-temp-debug-sg",
+    "resource_type": "AwsEc2SecurityGroup",
+    "resource_name": "orders-demo-temp-debug-sg",
+    "tags": {
+      "environment": "dev",
+      "app": "orders-demo"
+    }
+  }
+]

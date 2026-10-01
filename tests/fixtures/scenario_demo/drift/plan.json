@@ -1,0 +1,38 @@
+{
+  "resource_drift": [
+    {
+      "address": "awsec2securitygroup.orders_demo_app_sg",
+      "type": "AwsEc2SecurityGroup",
+      "name": "orders-demo-app-sg",
+      "change": {
+        "actions": [
+          "update"
+        ]
+      },
+      "notes": "simulate_clickops.sh step 1: authorizes tcp/8080 from 0.0.0.0/0 \u2014 security-weakening, unticketed -> revert"
+    },
+    {
+      "address": "awsec2instance.orders_demo_web",
+      "type": "AwsEc2Instance",
+      "name": "orders-demo-web",
+      "change": {
+        "actions": [
+          "update"
+        ]
+      },
+      "notes": "simulate_clickops.sh step 2: tags cost-center=CC-1042, change-ticket=CHG-2211 \u2014 ticketed & benign -> codify"
+    },
+    {
+      "address": "awss3bucket.orders_demo_assets",
+      "type": "AwsS3Bucket",
+      "name": "orders-demo-assets",
+      "change": {
+        "actions": [
+          "update"
+        ]
+      },
+      "notes": "simulate_clickops.sh step 3: suspends versioning \u2014 security-weakening -> revert"
+    }
+  ],
+  "generated_at": "2026-01-20T03:00:00+00:00"
+}
